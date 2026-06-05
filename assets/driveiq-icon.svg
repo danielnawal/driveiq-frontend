@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo ámbar redondeado -->
+  <rect width="120" height="120" rx="26" fill="url(#bg)"/>
+  <!-- Brillo superior (igual que InspectPro) -->
+  <rect width="120" height="56" rx="26" fill="url(#shine)"/>
+
+  <!-- Arco del velocímetro — pista completa (blanco semitransparente) -->
+  <!-- Centro: (60, 67) · radio: 36 · extremos: (24,67) y (96,67) -->
+  <path d="M 24 67 A 36 36 0 0 1 96 67"
+        stroke="rgba(255,255,255,0.25)" stroke-width="8" fill="none" stroke-linecap="round"/>
+
+  <!-- Arco activo — blanco sólido, ~78% del arco -->
+  <!-- Punto al 78%: x=60+36·cos(40°)=87.6  y=67-36·sin(40°)=43.9 -->
+  <path d="M 24 67 A 36 36 0 0 1 87.6 43.9"
+        stroke="white" stroke-width="8" fill="none" stroke-linecap="round" stroke-opacity="0.95"/>
+
+  <!-- Marcas de escala -->
+  <line x1="24" y1="67" x2="30" y2="67" stroke="white" stroke-opacity="0.5" stroke-width="2" stroke-linecap="round"/>
+  <line x1="60" y1="31" x2="60" y2="37" stroke="white" stroke-opacity="0.5" stroke-width="2" stroke-linecap="round"/>
+  <line x1="96" y1="67" x2="90" y2="67" stroke="white" stroke-opacity="0.5" stroke-width="2" stroke-linecap="round"/>
+  <line x1="85.5" y1="41.5" x2="81.2" y2="45.8" stroke="white" stroke-opacity="0.35" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- Aguja (blanco con sombra oscura para contraste) -->
+  <line x1="60" y1="67" x2="79.9" y2="50.3"
+        stroke="rgba(120,50,0,0.35)" stroke-width="5" stroke-linecap="round"/>
+  <line x1="60" y1="67" x2="79.9" y2="50.3"
+        stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+
+  <!-- Centro de la aguja -->
+  <circle cx="60" cy="67" r="6.5" fill="white" opacity="0.97"/>
+  <circle cx="60" cy="67" r="3.5" fill="#92400E"/>
+
+  <!-- Barras de rendimiento — blanco con opacidad -->
+  <rect x="24" y="82" width="7" height="10" rx="2" fill="white" fill-opacity="0.3"/>
+  <rect x="35" y="79" width="7" height="13" rx="2" fill="white" fill-opacity="0.45"/>
+  <rect x="46" y="74" width="7" height="18" rx="2" fill="white" fill-opacity="0.85"/>
+  <rect x="57" y="77" width="7" height="15" rx="2" fill="white" fill-opacity="0.45"/>
+  <rect x="68" y="72" width="7" height="20" rx="2" fill="white"/>
+  <rect x="79" y="76" width="7" height="16" rx="2" fill="white" fill-opacity="0.45"/>
+  <rect x="90" y="79" width="7" height="13" rx="2" fill="white" fill-opacity="0.3"/>
+</svg>

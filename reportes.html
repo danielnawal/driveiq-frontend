@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>DriveIQ — Reportes Masivos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+/* ================== THEME (CLARO por defecto) ================== */
+:root{
+  --bg:#ffffff;
+  --panel:#f6f8fc;
+  --panel2:#ffffff;
+  --line:#d7deea;
+  --txt:#111827;
+  --muted:#6b7280;
+  --accent:#2563eb;
+  --accent2:#7c3aed;
+  --good:#16a34a;
+  --warn:#d97706;
+  --bad:#dc2626;
+  --shadow: 0 10px 24px rgba(17,24,39,.08);
+}
+
+body.dark{
+  --bg:#0b1020;
+  --panel:#111a33;
+  --panel2:#0f1730;
+  --line:#243156;
+  --txt:#e8eeff;
+  --muted:#9aa7d6;
+  --accent:#60a5fa;
+  --accent2:#a78bfa;
+  --good:#22c55e;
+  --warn:#fbbf24;
+  --bad:#ef4444;
+  --shadow: 0 12px 30px rgba(0,0,0,.25);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background: var(--bg);
+  color: var(--txt);
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+.wrap{max-width:1500px;margin:0 auto;padding:16px}
+.topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+h1{margin:0;font-size:20px;font-weight:900}
+.sub{margin-top:2px;color:var(--muted);font-size:12px}
+.spacer{flex:1}
+
+.pill{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:6px 10px;border-radius:999px;
+  border:1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size:12px;
+}
+
+.card{
+  background: var(--panel2);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:12px;
+  box-shadow: var(--shadow);
+  margin-bottom:12px;
+}
+
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+label{font-size:12px;color:var(--muted)}
+input,select,button{
+  background:var(--panel2);
+  color:var(--txt);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:13px;
+}
+button{cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{
+  background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 80%, white), color-mix(in oklab, var(--accent2) 55%, white));
+  color: #fff;
+  border-color: color-mix(in oklab, var(--accent) 60%, white);
+}
+button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+.note{color:var(--muted);font-size:12px;line-height:1.4;margin-top:8px}
+hr{border:none;height:1px;background:var(--line);margin:10px 0}
+
+.kpis{
+  display:grid;
+  grid-template-columns: repeat(6, minmax(0,1fr));
+  gap:10px;
+}
+@media(max-width:1200px){ .kpis{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media(max-width:700px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.kpi{
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:10px;
+  background: var(--panel);
+}
+.kpi .l{font-size:12px;color:var(--muted)}
+.kpi .v{font-size:18px;font-weight:900;margin-top:4px}
+
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{color:var(--muted);user-select:none}
+tbody tr:hover{background: color-mix(in oklab, var(--panel) 55%, transparent)}
+
+.badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:4px 10px;border-radius:999px;
+  font-weight:900;font-size:12px;
+}
+.good{background: color-mix(in oklab, var(--good) 16%, transparent); color: var(--good)}
+.warn{background: color-mix(in oklab, var(--warn) 18%, transparent); color: var(--warn)}
+.bad{background: color-mix(in oklab, var(--bad) 16%, transparent); color: var(--bad)}
+
+.col-rank{width:70px}
+.col-name{width:26%}
+.col-veh{width:20%}
+.col-num{width:10%}
+.col-total{width:11%}
+.col-grade{width:14%}
+.col-score{width:10%}
+
+select[multiple]{min-width:360px; min-height:120px; padding:8px}
+@media(max-width:700px){select[multiple]{min-width:100%}}
+
+/* ===== Switch pequeño ===== */
+.switch{
+  display:flex;align-items:center;gap:6px;
+  font-size:12px;color:var(--muted);
+}
+.switch input{display:none}
+.slider{
+  width:36px;height:18px;border-radius:999px;
+  background: color-mix(in oklab, var(--line) 70%, white);
+  position:relative;cursor:pointer;border:1px solid var(--line);
+}
+.slider:before{
+  content:"";position:absolute;top:2px;left:2px;
+  width:14px;height:14px;border-radius:50%;
+  background: var(--panel2);
+  border:1px solid var(--line);
+  transition:.2s;
+}
+.switch input:checked + .slider{
+  background: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 70%, white);
+}
+.switch input:checked + .slider:before{
+  transform:translateX(18px);
+}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <h1>DriveIQ — Reportes Masivos</h1>
+      <div class="sub">Fechas igual que Appogio: “hoy / esta semana / este mes” hasta la hora actual</div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="switch" title="Cambiar entre modo claro y oscuro">
+      Claro
+      <label>
+        <input type="checkbox" id="themeToggle">
+        <span class="slider"></span>
+      </label>
+      Oscuro
+    </div>
+
+    <div class="pill">Ir a: <a href="/dashboard.html">Dashboard</a> · <a href="/ranking.html">Ranking</a></div>
+    <div class="pill" id="status">Listo</div>
+  </div>
+
+  <div class="card row">
+    <label>Rango
+      <select id="preset">
+        <option value="hoy">Hoy</option>
+        <option value="ayer">Ayer</option>
+        <option value="esta_semana">Esta semana</option>
+        <option value="semana_pasada">Semana pasada</option>
+        <option value="este_mes" selected>Este mes</option>
+        <option value="mes_pasado">Mes pasado</option>
+        <option value="personalizado">Personalizado</option>
+      </select>
+    </label>
+
+    <label>Desde <input type="date" id="fromDate"></label>
+    <label>Hasta <input type="date" id="toDate"></label>
+
+    <label>Agrupar por
+      <select id="groupBy">
+        <option value="auto" selected>Conductor (si existe) / Vehículo (si no)</option>
+        <option value="driver">Conductor (solo)</option>
+        <option value="vehicle">Vehículo (solo)</option>
+      </select>
+    </label>
+
+    <label>Vehículos (uno / varios / todos)
+      <select id="vehicleSelect" multiple></select>
+    </label>
+
+    <button id="btnAll">Seleccionar todos</button>
+    <button id="btnNone">Limpiar</button>
+
+    <span class="spacer"></span>
+    <button class="primary" id="btnRun">Generar reporte</button>
+  </div>
+
+  <div class="card">
+    <div id="noData" class="note" style="display:none">
+      No hay eventos registrados para el período seleccionado.
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">Filas (ranking)</div><div class="v" id="kRows">—</div></div>
+      <div class="kpi"><div class="l">Eventos totales</div><div class="v" id="kTotal">—</div></div>
+      <div class="kpi"><div class="l">Aceleraciones</div><div class="v" id="kAccel">—</div></div>
+      <div class="kpi"><div class="l">Frenadas</div><div class="v" id="kBrake">—</div></div>
+      <div class="kpi"><div class="l">Giros</div><div class="v" id="kTurn">—</div></div>
+      <div class="kpi"><div class="l">Exceso velocidad</div><div class="v" id="kSpeed">—</div></div>
+    </div>
+
+    <div class="note">
+      Ranking mejor → peor: se calcula por <b>eventos ponderados</b> (menos = mejor).
+      Exceso de velocidad se toma de <b>/api/alerts/speed</b>.
+    </div>
+  </div>
+
+  <div class="card row">
+    <button id="btnCSV">Descargar CSV</button>
+    <button id="btnJSON">Descargar JSON</button>
+    <button id="btnHTML">Descargar HTML</button>
+    <button id="btnPDF">Descargar PDF</button>
+    <button id="btnXLSX">Descargar Excel (XLSX)</button>
+    <span class="spacer"></span>
+    <small id="rangeText">—</small>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:8px">
+      <div style="flex:1">
+        <label>Buscar en el ranking</label><br>
+        <input id="q" style="width:100%" placeholder="Conductor o vehículo...">
+      </div>
+    </div>
+
+    <div style="overflow:auto;border-radius:12px;border:1px solid var(--line)">
+      <table id="reportTable">
+        <thead>
+          <tr>
+            <th class="col-rank">Pos.</th>
+            <th class="col-name">Conductor / Vehículo</th>
+            <th class="col-veh">Vehículo</th>
+            <th class="col-num">Acel.</th>
+            <th class="col-num">Fren.</th>
+            <th class="col-num">Giros</th>
+            <th class="col-num">Vel.</th>
+            <th class="col-total">Total</th>
+            <th class="col-score">Score</th>
+            <th class="col-grade">Calificación</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      “Score” se llena si existe ranking mensual (<b>/api/ranking?period=YYYY-MM</b>) del mes de “Hasta”.
+      Si no hay score para esa fila, mostrará “—”.
+    </div>
+  </div>
+
+</div>
+
+<!-- Librerías (PDF/XLSX) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
+
+<script>
+/* ================== TEMA ================== */
+(function(){
+  const toggle=document.getElementById("themeToggle");
+  const saved = localStorage.getItem("driveiq_theme");
+  if(saved === "dark"){
+    document.body.classList.add("dark");
+    toggle.checked = true;
+  }
+  toggle.addEventListener("change", ()=>{
+    document.body.classList.toggle("dark");
+    localStorage.setItem("driveiq_theme", document.body.classList.contains("dark") ? "dark" : "light");
+  });
+})();
+
+/* ================== ENDPOINTS EXISTENTES ================== */
+const API = {
+  vehicles: "/api/vehicles",
+  drivers: "/api/drivers",
+  events: "/api/events",
+  speed: "/api/alerts/speed",
+  ranking: "/api/ranking"
+};
+
+const $ = (id)=>document.getElementById(id);
+function setStatus(msg){ $("status").textContent = msg; }
+
+let VEH_MAP = new Map();
+let DRV_MAP = new Map();
+
+let RAW_EVENTS = [];
+let RAW_SPEED = [];
+
+let REPORT_ROWS = [];
+let VIEW_ROWS = [];
+
+/* ================== FECHAS (IGUAL QUE APPOGIO) ==================
+- Hoy: desde 00:00 hasta AHORA
+- Esta semana: lunes 00:00 hasta AHORA
+- Este mes: día 1 00:00 hasta AHORA
+- Ayer / semana pasada / mes pasado: rangos completos cerrados
+*/
+function isoDate(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function startOfWeekMonday(d){
+  const x=new Date(d);
+  const day=(x.getDay()+6)%7; // lunes=0
+  x.setDate(x.getDate()-day);
+  x.setHours(0,0,0,0);
+  return x;
+}
+function endOfDay(d){
+  const x=new Date(d);
+  x.setHours(23,59,59,999);
+  return x;
+}
+function startOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1, 0,0,0,0); }
+function endOfPrevMonth(now){
+  return new Date(now.getFullYear(), now.getMonth(), 0, 23,59,59,999);
+}
+
+function applyPreset(){
+  const p=$("preset").value;
+  const now=new Date();
+  let fromDt, toDt, fromDateStr, toDateStr;
+
+  if(p==="hoy"){
+    fromDt = new Date(now); fromDt.setHours(0,0,0,0);
+    toDt = new Date(); // AHORA
+    fromDateStr = isoDate(fromDt);
+    toDateStr = isoDate(toDt);
+  }else if(p==="ayer"){
+    const y=new Date(); y.setDate(y.getDate()-1);
+    fromDt = new Date(y); fromDt.setHours(0,0,0,0);
+    toDt = endOfDay(y);
+    fromDateStr = isoDate(fromDt);
+    toDateStr = isoDate(toDt);
+  }else if(p==="esta_semana"){
+    fromDt = startOfWeekMonday(now);
+    toDt = new Date(); // AHORA
+    fromDateStr = isoDate(fromDt);
+    toDateStr = isoDate(toDt);
+  }else if(p==="semana_pasada"){
+    const w=new Date(now);
+    w.setDate(w.getDate()-7);
+    fromDt = startOfWeekMonday(w);
+    toDt = new Date(fromDt);
+    toDt.setDate(toDt.getDate()+6);
+    toDt = endOfDay(toDt);
+    fromDateStr = isoDate(fromDt);
+    toDateStr = isoDate(toDt);
+  }else if(p==="este_mes"){
+    fromDt = startOfMonth(now);
+    toDt = new Date(); // AHORA
+    fromDateStr = isoDate(fromDt);
+    toDateStr = isoDate(toDt);
+  }else if(p==="mes_pasado"){
+    const from = new Date(now.getFullYear(), now.getMonth()-1, 1, 0,0,0,0);
+    const to = endOfPrevMonth(now);
+    fromDt = from; toDt = to;
+    fromDateStr = isoDate(fromDt);
+    toDateStr = isoDate(toDt);
+  }else{
+    return; // personalizado: no forzamos
+  }
+
+  $("fromDate").value = fromDateStr;
+  $("toDate").value = toDateStr;
+
+  // Guardamos internamente "hasta ahora" cuando aplique
+  window.__driveiq_to_now = (p==="hoy" || p==="esta_semana" || p==="este_mes") ? toDt : null;
+}
+
+function getRange(){
+  const f=$("fromDate").value, t=$("toDate").value;
+  if(!f || !t) return null;
+
+  const fromDt = new Date(f+"T00:00:00");
+  // Por defecto: hasta fin del día
+  let toDt = new Date(t+"T23:59:59");
+
+  // Si el preset es hoy/esta_semana/este_mes → “hasta AHORA”
+  const p=$("preset").value;
+  if(p==="hoy" || p==="esta_semana" || p==="este_mes"){
+    // si el "hasta" es hoy, usamos AHORA
+    const now = new Date();
+    if(t === isoDate(now)) toDt = now;
+  }
+
+  return { from:f, to:t, fromDt, toDt, preset: p };
+}
+
+function ymFromDateStr(dateStr){
+  if(!dateStr || dateStr.length<7) return null;
+  return dateStr.slice(0,7);
+}
+
+/* ================== HELPERS API ================== */
+async function fetchJson(url){
+  const r = await fetch(url, { cache:"no-store" });
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  const j = await r.json();
+  return Array.isArray(j) ? j : [];
+}
+function pick(obj, keys){
+  for(const k of keys){
+    if(obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
+  }
+  return null;
+}
+function inRange(t, fromDt, toDt){
+  if(!t || isNaN(t.getTime())) return false;
+  return t>=fromDt && t<=toDt;
+}
+function escapeHtml(s){
+  return (s ?? "").toString()
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+
+/* ================== EVENTOS NORMALIZACIÓN ================== */
+function classifyType(rawType){
+  const s=(rawType||"").toString().toLowerCase();
+  if(s.includes("accel") || s.includes("aceler")) return "accel";
+  if(s.includes("brake") || s.includes("frena")) return "brake";
+  if(s.includes("turn") || s.includes("corner") || s.includes("giro")) return "turn";
+  if(s.includes("speed") || s.includes("veloc")) return "speed";
+  return null;
+}
+function normalizeEvent(e, forcedType=null){
+  const ts = pick(e, ["timestamp","time","created_at","date","event_time","occurred_at"]);
+  const t = ts ? new Date(ts) : null;
+  const vehicle_id = pick(e, ["vehicle_id","vehicleId","vehicle","unit_id","unitId","asset_id","assetId"]);
+  const driver_id  = pick(e, ["driver_id","driverId","driver","operator_id","operatorId"]);
+  const typRaw = forcedType || pick(e, ["type","event_type","eventType","alert_type","alertType","name","code"]);
+  const cls = classifyType(typRaw);
+  return { raw:e, t, vehicle_id, driver_id, typ:(typRaw||"").toString(), cls };
+}
+
+function vehicleName(id){ return id ? (VEH_MAP.get(id) || id) : "—"; }
+function driverName(id){ return id ? (DRV_MAP.get(id) || id) : null; }
+
+/* ================== SELECTOR VEHÍCULOS ================== */
+function selectedVehicleIds(){
+  const sel=$("vehicleSelect");
+  const vals=Array.from(sel.selectedOptions).map(o=>o.value);
+  if(vals.length===0) return null; // todos
+  if(vals.includes("__all__")) return null;
+  return vals;
+}
+
+/* ================== CATÁLOGOS ================== */
+async function loadCatalogs(){
+  VEH_MAP.clear(); DRV_MAP.clear();
+  const sel=$("vehicleSelect");
+  sel.innerHTML="";
+
+  try{
+    const arr = await fetchJson(API.vehicles);
+    for(const x of arr){
+      const id = pick(x, ["vehicle_id","id","vehicleId","unit_id","unitId","asset_id","assetId"]);
+      if(!id) continue;
+      const name = pick(x, ["name","alias","plate","license_plate","vehicle_name","label"]) || id;
+      VEH_MAP.set(id, name);
+    }
+  }catch(e){}
+
+  try{
+    const arr = await fetchJson(API.drivers);
+    for(const x of arr){
+      const id = pick(x, ["driver_id","id","driverId","operator_id","operatorId"]);
+      if(!id) continue;
+      const name = pick(x, ["name","full_name","fullname","display_name","alias"]) || id;
+      DRV_MAP.set(id, name);
+    }
+  }catch(e){}
+
+  const ids = Array.from(VEH_MAP.keys()).sort();
+  if(ids.length===0){
+    const opt=document.createElement("option");
+    opt.value="__all__";
+    opt.textContent="No se cargó catálogo (se usará todo)";
+    sel.appendChild(opt);
+    opt.selected=true;
+    return;
+  }
+
+  for(const id of ids){
+    const opt=document.createElement("option");
+    opt.value=id;
+    opt.textContent=`${VEH_MAP.get(id)} (${id})`;
+    sel.appendChild(opt);
+  }
+}
+
+/* ================== CARGA EVENTOS ================== */
+async function loadData(){
+  const range=getRange();
+  if(!range){ alert("Debes seleccionar DESDE y HASTA."); return false; }
+  const vids=selectedVehicleIds();
+
+  RAW_EVENTS=[]; RAW_SPEED=[];
+
+  setStatus("Cargando /api/events…");
+  try{
+    // backend recibe YYYY-MM-DD, nosotros filtramos a nivel hora con toDt
+    const url = `${API.events}?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+    const arr = await fetchJson(url);
+    for(const e of arr){
+      const ne = normalizeEvent(e);
+      if(!ne.cls) continue;
+      if(ne.cls==="speed") continue; // speed se toma de alerts/speed
+      if(!inRange(ne.t, range.fromDt, range.toDt)) continue;
+      if(vids && ne.vehicle_id && !vids.includes(ne.vehicle_id)) continue;
+      RAW_EVENTS.push(ne);
+    }
+  }catch(e){
+    // fallback
+    try{
+      const arr = await fetchJson(API.events);
+      for(const e of arr){
+        const ne = normalizeEvent(e);
+        if(!ne.cls) continue;
+        if(ne.cls==="speed") continue;
+        if(!inRange(ne.t, range.fromDt, range.toDt)) continue;
+        if(vids && ne.vehicle_id && !vids.includes(ne.vehicle_id)) continue;
+        RAW_EVENTS.push(ne);
+      }
+    }catch(_){}
+  }
+
+  setStatus("Cargando /api/alerts/speed…");
+  try{
+    const url = `${API.speed}?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+    const arr = await fetchJson(url);
+    for(const s of arr){
+      const ns = normalizeEvent(s, "speed");
+      if(!inRange(ns.t, range.fromDt, range.toDt)) continue;
+      if(vids && ns.vehicle_id && !vids.includes(ns.vehicle_id)) continue;
+      ns.cls="speed";
+      RAW_SPEED.push(ns);
+    }
+  }catch(e){
+    try{
+      const arr = await fetchJson(API.speed);
+      for(const s of arr){
+        const ns = normalizeEvent(s, "speed");
+        if(!inRange(ns.t, range.fromDt, range.toDt)) continue;
+        if(vids && ns.vehicle_id && !vids.includes(ns.vehicle_id)) continue;
+        ns.cls="speed";
+        RAW_SPEED.push(ns);
+      }
+    }catch(_){}
+  }
+
+  return true;
+}
+
+/* ================== RANKING (EVENTOS PONDERADOS) ================== */
+const W = { accel:2.0, brake:2.0, turn:1.5, speed:3.0 };
+
+function gradeFromWeighted(x){
+  if(x <= 2)  return { txt:"Excelente", cls:"good" };
+  if(x <= 6)  return { txt:"Bueno", cls:"good" };
+  if(x <= 12) return { txt:"Regular", cls:"warn" };
+  if(x <= 20) return { txt:"Malo", cls:"bad" };
+  return { txt:"Crítico", cls:"bad" };
+}
+
+function buildReport(){
+  const mode = $("groupBy").value; // auto/driver/vehicle
+  const buckets=new Map();
+
+  function keyFor(ev){
+    const hasDriver=!!ev.driver_id;
+    if(mode==="driver") return hasDriver ? `D:${ev.driver_id}` : null;
+    if(mode==="vehicle") return `V:${ev.vehicle_id||"unknown"}`;
+    return hasDriver ? `D:${ev.driver_id}` : `V:${ev.vehicle_id||"unknown"}`;
+  }
+
+  function ensureBucket(key, ev){
+    if(!buckets.has(key)){
+      const isDriver = key.startsWith("D:");
+      const driver_id = isDriver ? key.slice(2) : null;
+      const vehicle_id = ev.vehicle_id || null;
+
+      const dname = driver_id ? driverName(driver_id) : null;
+      const vname = vehicleName(vehicle_id);
+      const display = dname ? dname : vname;
+
+      buckets.set(key, {
+        key,
+        kind: isDriver ? "driver" : "vehicle",
+        driver_id,
+        vehicle_id,
+        name: display,
+        vehicle: vname,
+        accel:0, brake:0, turn:0, speed:0,
+        score: null,
+        weighted: 0,
+        total: 0
+      });
+    }
+    return buckets.get(key);
+  }
+
+  for(const e of RAW_EVENTS){
+    const key = keyFor(e);
+    if(!key) continue;
+    const b=ensureBucket(key, e);
+    if(e.cls==="accel") b.accel++;
+    if(e.cls==="brake") b.brake++;
+    if(e.cls==="turn")  b.turn++;
+  }
+  for(const s of RAW_SPEED){
+    const key = keyFor(s);
+    if(!key) continue;
+    const b=ensureBucket(key, s);
+    b.speed++;
+  }
+
+  const rows=[];
+  for(const b of buckets.values()){
+    b.total = b.accel + b.brake + b.turn + b.speed;
+    b.weighted = b.accel*W.accel + b.brake*W.brake + b.turn*W.turn + b.speed*W.speed;
+    const g = gradeFromWeighted(b.weighted);
+
+    rows.push({
+      rank: 0,
+      key: b.key,
+      kind: b.kind,
+      driver_id: b.driver_id,
+      vehicle_id: b.vehicle_id,
+      name: b.name,
+      vehicle: b.vehicle,
+      accel: b.accel,
+      brake: b.brake,
+      turn: b.turn,
+      speed: b.speed,
+      total: b.total,
+      weighted: Number(b.weighted.toFixed(2)),
+      score: null,
+      gradeTxt: g.txt,
+      gradeCls: g.cls
+    });
+  }
+
+  rows.sort((a,b)=>a.weighted - b.weighted);
+  rows.forEach((r,i)=>r.rank=i+1);
+  return rows;
+}
+
+/* ================== SCORE MENSUAL (OPCIONAL) ================== */
+async function injectScores(rows){
+  const to=$("toDate").value;
+  const period=ymFromDateStr(to);
+  if(!period) return;
+
+  try{
+    const r = await fetch(`${API.ranking}?period=${encodeURIComponent(period)}`, {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const arr = await r.json();
+    if(!Array.isArray(arr)) return;
+
+    const map = new Map();
+    for(const x of arr){
+      if(!x || !x.driver_id) continue;
+      const sc=Number(x.score);
+      if(!Number.isFinite(sc)) continue;
+      map.set(x.driver_id, sc);
+    }
+
+    for(const row of rows){
+      if(row.kind==="driver" && row.driver_id && map.has(row.driver_id)){
+        row.score = Number(map.get(row.driver_id).toFixed(1));
+      }else{
+        row.score = null;
+      }
+    }
+  }catch(e){}
+}
+
+/* ================== UI: KPIs / TABLA / EXPORTES ================== */
+function updateKPIs(){
+  const accel = RAW_EVENTS.filter(e=>e.cls==="accel").length;
+  const brake = RAW_EVENTS.filter(e=>e.cls==="brake").length;
+  const turn  = RAW_EVENTS.filter(e=>e.cls==="turn").length;
+  const speed = RAW_SPEED.length;
+  const total = accel+brake+turn+speed;
+
+  $("kTotal").textContent = String(total);
+  $("kAccel").textContent = String(accel);
+  $("kBrake").textContent = String(brake);
+  $("kTurn").textContent  = String(turn);
+  $("kSpeed").textContent = String(speed);
+
+  const range=getRange();
+  $("rangeText").textContent = range ? `Rango: ${range.from} → ${range.to} (${range.preset})` : "—";
+
+  const any = (REPORT_ROWS && REPORT_ROWS.length>0);
+  $("noData").style.display = any ? "none" : "block";
+  setExportsEnabled(any);
+}
+
+function setExportsEnabled(enabled){
+  for(const id of ["btnCSV","btnJSON","btnHTML","btnPDF","btnXLSX"]){
+    const b=$(id);
+    if(b) b.disabled = !enabled;
+  }
+}
+
+function renderTable(){
+  const q=($("q").value||"").trim().toLowerCase();
+  VIEW_ROWS = q ? REPORT_ROWS.filter(r =>
+    (r.name||"").toLowerCase().includes(q) || (r.vehicle||"").toLowerCase().includes(q)
+  ) : REPORT_ROWS;
+
+  $("kRows").textContent = String(VIEW_ROWS.length);
+
+  const tb=$("tbody");
+  tb.innerHTML="";
+
+  for(const r of VIEW_ROWS){
+    const tr=document.createElement("tr");
+    tr.innerHTML = `
+      <td class="col-rank">${r.rank}</td>
+      <td class="col-name">${escapeHtml(r.name)}<div style="font-size:12px;color:var(--muted);margin-top:2px">${r.kind==="driver"?"Conductor":"Vehículo"}</div></td>
+      <td class="col-veh">${escapeHtml(r.vehicle)}</td>
+      <td class="col-num">${r.accel}</td>
+      <td class="col-num">${r.brake}</td>
+      <td class="col-num">${r.turn}</td>
+      <td class="col-num">${r.speed}</td>
+      <td class="col-total">${r.total}</td>
+      <td class="col-score">${r.score===null ? "—" : r.score}</td>
+      <td class="col-grade"><span class="badge ${r.gradeCls}">${escapeHtml(r.gradeTxt)}</span></td>
+    `;
+    tb.appendChild(tr);
+  }
+
+  setExportsEnabled(VIEW_ROWS.length>0);
+}
+
+/* ================== EXPORTES ================== */
+function fileBase(){
+  const r=getRange();
+  const range = r ? `${r.from}_a_${r.to}` : "rango";
+  return `driveiq_reporte_${range}`;
+}
+function currentMeta(){
+  const r=getRange();
+  return {
+    desde: r ? r.from : null,
+    hasta: r ? r.to : null,
+    preset: $("preset").value,
+    agrupar_por: $("groupBy").value,
+    vehiculos: selectedVehicleIds() || "Todos",
+    pesos: W,
+    generado_en: new Date().toLocaleString()
+  };
+}
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download=filename;
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportCSV(){
+  const rows = VIEW_ROWS.map(r=>({
+    posicion: r.rank,
+    nombre: r.name,
+    vehiculo: r.vehicle,
+    aceleraciones: r.accel,
+    frenadas: r.brake,
+    giros: r.turn,
+    exceso_velocidad: r.speed,
+    total_eventos: r.total,
+    total_ponderado: r.weighted,
+    score: r.score===null ? "" : r.score,
+    calificacion: r.gradeTxt
+  }));
+  const headers = Object.keys(rows[0] || {
+    posicion:"",nombre:"",vehiculo:"",aceleraciones:"",frenadas:"",giros:"",exceso_velocidad:"",
+    total_eventos:"",total_ponderado:"",score:"",calificacion:""
+  });
+  const csv = [
+    headers.join(","),
+    ...rows.map(r => headers.map(h => `"${(r[h]??"").toString().replaceAll('"','""')}"`).join(","))
+  ].join("\n");
+  downloadBlob(new Blob([csv],{type:"text/csv;charset=utf-8"}), `${fileBase()}.csv`);
+}
+
+function exportJSON(){
+  const payload = { meta: currentMeta(), filas: VIEW_ROWS };
+  downloadBlob(new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}), `${fileBase()}.json`);
+}
+
+function exportHTML(){
+  const meta = currentMeta();
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>DriveIQ – Reporte</title></head>
+  <body>
+    <h2>DriveIQ – Reporte Masivo</h2>
+    <pre>${escapeHtml(JSON.stringify(meta,null,2))}</pre>
+    ${document.getElementById("reportTable").outerHTML}
+  </body></html>`;
+  downloadBlob(new Blob([html],{type:"text/html;charset=utf-8"}), `${fileBase()}.html`);
+}
+
+function exportPDF(){
+  if(!(window.jspdf && window.jspdf.jsPDF)){
+    alert("No se cargó la librería PDF (requiere internet).");
+    return;
+  }
+  const doc = new window.jspdf.jsPDF({orientation:"landscape", unit:"pt", format:"a4"});
+  const meta = currentMeta();
+
+  doc.setFontSize(14);
+  doc.text("DriveIQ — Reporte Masivo", 40, 40);
+  doc.setFontSize(10);
+  doc.text(`Rango: ${meta.desde} a ${meta.hasta} • Agrupar: ${meta.agrupar_por}`, 40, 58);
+
+  if(typeof doc.autoTable !== "function"){
+    alert("No se cargó autoTable para PDF.");
+    return;
+  }
+
+  doc.autoTable({
+    html: "#reportTable",
+    startY: 75,
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [37,99,235] },
+    theme: "grid"
+  });
+
+  doc.save(`${fileBase()}.pdf`);
+}
+
+function exportXLSX(){
+  if(!(window.XLSX && XLSX.utils)){
+    alert("No se cargó la librería XLSX (requiere internet).");
+    return;
+  }
+  const meta = currentMeta();
+  const wb = XLSX.utils.book_new();
+
+  const ws1 = XLSX.utils.json_to_sheet([meta]);
+  ws1["!cols"] = [{wch:18},{wch:18},{wch:12},{wch:14},{wch:40},{wch:30},{wch:22}];
+  XLSX.utils.book_append_sheet(wb, ws1, "Meta");
+
+  const rows = VIEW_ROWS.map(r=>({
+    "Posición": r.rank,
+    "Nombre": r.name,
+    "Vehículo": r.vehicle,
+    "Aceleraciones": r.accel,
+    "Frenadas": r.brake,
+    "Giros": r.turn,
+    "Exceso velocidad": r.speed,
+    "Total eventos": r.total,
+    "Total ponderado": r.weighted,
+    "Score": r.score===null ? "" : r.score,
+    "Calificación": r.gradeTxt
+  }));
+  const ws2 = XLSX.utils.json_to_sheet(rows);
+  ws2["!cols"] = [{wch:10},{wch:30},{wch:22},{wch:14},{wch:12},{wch:10},{wch:14},{wch:12},{wch:14},{wch:10},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws2, "Ranking");
+
+  XLSX.writeFile(wb, `${fileBase()}.xlsx`);
+}
+
+/* ================== ACCIÓN PRINCIPAL ================== */
+async function run(){
+  const range=getRange();
+  if(!range){ alert("Debes seleccionar DESDE y HASTA."); return; }
+
+  setStatus("Generando…");
+  $("tbody").innerHTML="";
+  $("kRows").textContent="—";
+  setExportsEnabled(false);
+
+  const ok = await loadData();
+  if(!ok){
+    setStatus("Error");
+    return;
+  }
+
+  REPORT_ROWS = buildReport();
+  await injectScores(REPORT_ROWS);
+
+  // re-rank
+  REPORT_ROWS.sort((a,b)=>a.weighted - b.weighted);
+  REPORT_ROWS.forEach((r,i)=>r.rank=i+1);
+
+  updateKPIs();
+  renderTable();
+
+  setStatus("OK • " + new Date().toLocaleString());
+}
+
+/* ================== INIT ================== */
+function setup(){
+  applyPreset();
+
+  $("preset").addEventListener("change", ()=>{
+    if($("preset").value !== "personalizado") applyPreset();
+  });
+
+  $("btnAll").addEventListener("click", ()=>{
+    const sel=$("vehicleSelect");
+    for(const opt of sel.options) opt.selected=true;
+  });
+  $("btnNone").addEventListener("click", ()=>{
+    const sel=$("vehicleSelect");
+    for(const opt of sel.options) opt.selected=false;
+  });
+
+  $("btnRun").addEventListener("click", run);
+  $("q").addEventListener("input", renderTable);
+
+  $("btnCSV").addEventListener("click", exportCSV);
+  $("btnJSON").addEventListener("click", exportJSON);
+  $("btnHTML").addEventListener("click", exportHTML);
+  $("btnPDF").addEventListener("click", exportPDF);
+  $("btnXLSX").addEventListener("click", exportXLSX);
+
+  loadCatalogs().then(run);
+}
+
+setup();
+</script>
+</body>
+</html>

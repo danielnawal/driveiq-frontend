@@ -1,0 +1,312 @@
+
+<!doctype html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DriveIQ — Análisis de Conducción</title>
+<link rel="icon" type="image/svg+xml" href="assets/driveiq-icon.svg">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=6.2">
+<script>(function(){
+  var t = localStorage.getItem('driveiq_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+  document.documentElement.style.background = t === 'dark' ? '#0B1220' : '#f6f8fb';
+  document.documentElement.style.colorScheme = t === 'dark' ? 'dark' : 'light';
+  var s = document.createElement('style');
+  s.id = 'no-fouc';
+  s.textContent = '*,*::before,*::after{transition:none!important}';
+  document.head.appendChild(s);
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      var e = document.getElementById('no-fouc');
+      if(e) e.remove();
+      document.documentElement.style.background = '';
+      document.documentElement.style.colorScheme = '';
+    }, 50);
+  });
+})();</script>
+</head>
+<body>
+<nav class="navbar" id="topbar">
+  <div class="container-fluid d-flex align-items-stretch" style="padding:0">
+    <div class="topbar-brand">
+      <img src="assets/driveiq-icon.svg" class="topbar-brand-icon" alt="DriveIQ">
+      <div class="topbar-brand-text">
+        <div class="h4 mb-0" id="appName">DriveIQ</div>
+        <small id="appSubtitle">Inteligencia de conducción y análisis de rendimiento</small>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="diq-nav-link" onclick="openManual()">Manual</button>
+      <button id="themeToggle" class="btn btn-sm theme-toggle-btn" title="Cambiar tema">
+        <span class="theme-icon-wrapper"><span id="themeIcon">🌙</span></span>
+        <span class="theme-label ms-2" id="themeLabel">Modo oscuro</span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Navegación de secciones ──────────────────────────────────── -->
+<div class="diq-section-nav" id="sectionNav">
+  <button class="diq-snav-btn active" data-section="inicio" onclick="scrollToSection('inicio')">Inicio</button>
+  <button class="diq-snav-btn" data-section="conductores" onclick="scrollToSection('conductores')">Conductores</button>
+  <button class="diq-snav-btn" data-section="analisis" onclick="scrollToSection('analisis')">Análisis</button>
+  <button class="diq-snav-btn" data-section="eventos" onclick="scrollToSection('eventos')">Eventos</button>
+</div>
+
+<div class="container-fluid mt-3">
+  <div class="row">
+    <aside class="col-lg-3">
+      <div class="card mb-3 p-2">
+        <h6>Resumen general</h6>
+        <div id="summaryCards" class="mb-2">
+          <div class="card p-2 mb-1"><strong>Puntaje promedio</strong><div id="avgScoreSmall">—</div></div>
+          <div class="card p-2 mb-1"><strong>Conductores</strong><div id="numDrivers">—</div></div>
+          <div class="card p-2"><strong>Eventos</strong><div id="numEvents">—</div></div>
+        </div>
+        <hr/>
+        <button id="openThresholds" class="btn btn-outline-secondary btn-sm mb-2">Umbrales</button>
+        <div class="small text-muted mb-2">Puedes dejar campos vacíos para ignorar niveles.</div>
+      </div>
+
+      <div class="card mb-3 p-2">
+        <h6>Configuración</h6>
+        <div class="mb-2"><button id="openAssignTypes" class="btn btn-outline-primary btn-sm w-100">Asignar tipos de vehículo</button></div>
+        <label class="mt-2">Vehículos</label>
+        <div id="filterVehicleContainer" class="filter-checkbox-container mb-2">
+          <div class="filter-checkbox-header">
+            <label class="filter-checkbox-item">
+              <input type="checkbox" id="selectAllVehicles" class="filter-checkbox">
+              <span id="selectAllVehiclesLabel">Seleccionar todos</span>
+            </label>
+          </div>
+          <div id="vehicleGroupsContainer" class="filter-groups-container"></div>
+          <div id="vehicleListContainer" class="filter-list-container"></div>
+        </div>
+        <label>Conductores</label>
+        <div id="filterDriverContainer" class="filter-checkbox-container mb-2">
+          <div class="filter-checkbox-header">
+            <label class="filter-checkbox-item">
+              <input type="checkbox" id="selectAllDrivers" class="filter-checkbox">
+              <span id="selectAllDriversLabel">Seleccionar todos</span>
+            </label>
+          </div>
+          <div id="driverListContainer" class="filter-list-container"></div>
+        </div>
+        <label>Rango de fechas</label><input id="startDate" type="date" class="form-control form-control-sm mb-1"><input id="endDate" type="date" class="form-control form-control-sm mb-2">
+        <label>Rangos rápidos</label><select id="quickRange" class="form-select form-select-sm mb-2"><option value="last30" selected>Últimos 30 días</option><option value="today">Hoy</option><option value="yesterday">Ayer</option><option value="last7">Últimos 7 días</option><option value="last_month">Mes pasado</option></select>
+        <label>Formatos</label>
+        <div class="d-flex gap-2 mb-2">
+          <button class="btn report-btn active" data-type="pdf">PDF</button>
+          <button class="btn report-btn active" data-type="xlsx">XLSX</button>
+          <button class="btn report-btn active" data-type="csv">CSV</button>
+          <button class="btn report-btn active" data-type="json">JSON</button>
+          <button class="btn report-btn active" data-type="html">HTML</button>
+        </div>
+        <div class="d-grid gap-2"><button id="btnGenerate" class="btn btn-success btn-sm">Generar informe</button></div>
+        <div class="mt-2 small text-muted">Guarda tipos de vehículo antes de generar informes.</div>
+      </div>
+    </aside>
+
+    <main class="col-lg-9">
+
+      <!-- KPI Hero Cards -->
+      <div class="row g-3 mb-3" id="heroRow">
+        <div class="col-6 col-lg-3">
+          <div class="kpi-card kpi-card-amber">
+            <div class="kpi-top">
+              <span class="kpi-label">Puntaje promedio</span>
+              <span class="kpi-badge" id="kpiScoreBadge"></span>
+            </div>
+            <div class="kpi-value" id="kpiScoreVal">—</div>
+            <div class="kpi-bar-track">
+              <div class="kpi-bar-fill" id="kpiScoreBar" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3">
+          <div class="kpi-card kpi-card-blue">
+            <div class="kpi-top">
+              <span class="kpi-label">Conductores</span>
+              <span class="kpi-badge kpi-badge-blue" id="kpiDriversBadge"></span>
+            </div>
+            <div class="kpi-value" id="kpiDriversVal">—</div>
+            <div class="kpi-bar-track">
+              <div class="kpi-bar-fill kpi-fill-blue" id="kpiDriversBar" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3">
+          <div class="kpi-card kpi-card-red">
+            <div class="kpi-top">
+              <span class="kpi-label">Eventos</span>
+              <span class="kpi-badge kpi-badge-red" id="kpiEventsBadge"></span>
+            </div>
+            <div class="kpi-value" id="kpiEventsVal">—</div>
+            <div class="kpi-bar-track">
+              <div class="kpi-bar-fill kpi-fill-red" id="kpiEventsBar" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3">
+          <div class="kpi-card kpi-card-green">
+            <div class="kpi-top">
+              <span class="kpi-label">Vehículos</span>
+              <span class="kpi-badge kpi-badge-green" id="kpiVehiclesBadge"></span>
+            </div>
+            <div class="kpi-value" id="kpiVehiclesVal">—</div>
+            <div class="kpi-bar-track">
+              <div class="kpi-bar-fill kpi-fill-green" id="kpiVehiclesBar" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="driversSection" class="card mb-3">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Conductores y rendimiento</h5>
+          <div><span id="totalDrivers">0</span> conductores</div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped mb-0" id="driversTable">
+              <thead class="table-light"><tr><th>Conductor</th><th>Vehículo</th><th>Tipo</th><th>Eventos</th><th><span class="score-header" id="scoreHeader">Puntuación <span class="score-header-arrow">▼</span></span></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-3 p-2"><h6>Distribución de eventos</h6><div class="chart-container"><canvas id="barChart"></canvas></div></div>
+
+      <div id="eventsSection" class="card mb-3"><div class="card-body"><h6>Tabla de eventos</h6><div class="table-responsive"><table class="table table-sm" id="eventsTable"><thead class="table-light"><tr><th>Trip</th><th>Conductor</th><th>Tipo</th><th>Severidad</th><th>Fecha</th><th>Velocidad</th><th>Ubicación</th></tr></thead><tbody></tbody></table></div></div></div>
+
+      <!-- ══════════════════════════════════════════════════════════════
+           SECCIÓN ANÁLISIS
+           ══════════════════════════════════════════════════════════════ -->
+      <div id="analisisSection" class="diq-analisis-section mt-2">
+
+        <!-- Header -->
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <h5 class="mb-0">Análisis de tendencias</h5>
+            <small class="text-muted">Evolución histórica y patrones de conducción — últimos 6 meses</small>
+          </div>
+          <select id="analisisDriverSelect" class="form-select form-select-sm diq-driver-select">
+            <option value="">Toda la flota</option>
+          </select>
+        </div>
+
+        <!-- KPI strip -->
+        <div class="diq-analisis-kpi-strip mb-3">
+          <div class="diq-analisis-kpi-block">
+            <div class="diq-analisis-kpi-val" id="analisisScoreVal">—</div>
+            <div class="diq-analisis-kpi-label">Score actual</div>
+          </div>
+          <div class="diq-analisis-kpi-divider"></div>
+          <div class="diq-analisis-kpi-block">
+            <div class="diq-analisis-kpi-val" id="analisisTrendVal">—</div>
+            <div class="diq-analisis-kpi-label">vs mes anterior</div>
+          </div>
+          <div class="diq-analisis-kpi-divider"></div>
+          <div class="diq-analisis-kpi-block">
+            <div class="diq-analisis-kpi-val" id="analisisNightVal">—</div>
+            <div class="diq-analisis-kpi-label">Nocturno prom.</div>
+          </div>
+          <div class="diq-analisis-kpi-divider"></div>
+          <div class="diq-analisis-kpi-block">
+            <div class="diq-analisis-kpi-val" id="analisisEventsVal">—</div>
+            <div class="diq-analisis-kpi-label">Eventos / día</div>
+          </div>
+        </div>
+
+        <!-- Score trend chart -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0">Evolución del score</h6>
+              <span id="analisisScoreTrendBadge" class="diq-trend-badge"></span>
+            </div>
+            <div style="height:180px; position:relative"><canvas id="scoreTrendChart"></canvas></div>
+            <div id="scoreTrendPills" class="diq-month-pills mt-3"></div>
+          </div>
+        </div>
+
+        <!-- Events trend chart -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="mb-3">Eventos por mes</h6>
+            <div style="height:150px; position:relative"><canvas id="eventsTrendChart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Week pattern + Night side by side -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <div class="card h-100">
+              <div class="card-body">
+                <h6 class="mb-3">Semana típica</h6>
+                <div style="height:140px; position:relative"><canvas id="weekPatternChart"></canvas></div>
+                <p class="text-muted small mt-2 mb-0" id="worstDayMsg"></p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card h-100">
+              <div class="card-body">
+                <h6 class="mb-3">Conducción nocturna (20:00–06:00)</h6>
+                <div style="height:140px; position:relative"><canvas id="nightByMonthChart"></canvas></div>
+                <p class="text-muted small mt-2 mb-0" id="nightSummaryMsg"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Logros / badges -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <h6 class="mb-3">Logros de conductores</h6>
+            <div id="badgesGrid"></div>
+          </div>
+        </div>
+
+      </div><!-- /analisisSection -->
+
+    </main>
+  </div>
+</div>
+
+<!-- Offcanvas: detalle -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="driverDetail"><div class="offcanvas-header"><h5 id="driverDetailLabel">Detalle conductor</h5><button class="btn-close" data-bs-dismiss="offcanvas"></button></div>
+<div class="offcanvas-body">
+  <div id="driverHeader" class="d-flex align-items-center gap-2 mb-3"><div id="vehicleSourceIcon" style="font-size:20px"></div><div><h5 id="detailDriverName"></h5><div id="detailVehicleName"></div></div></div>
+  <div><strong>Puntuación:</strong> <span id="detailScore"></span></div><hr/>
+  <h6>Eventos</h6><div class="table-responsive"><table class="table table-sm" id="detailEventsTable"><thead><tr><th id="thTripDetail">Viaje</th><th>Tipo</th><th>Severidad</th><th>Fecha</th><th>Ubicación</th></tr></thead><tbody></tbody></table></div><hr/>
+  <div id="servicesContainer"></div>
+  <hr/>
+  <div class="d-flex gap-2"><button id="downloadPdf" class="btn btn-primary btn-sm">PDF</button><button id="downloadXls" class="btn btn-outline-secondary btn-sm">Excel</button><button id="downloadCsv" class="btn btn-outline-secondary btn-sm">CSV</button><button id="downloadJson" class="btn btn-outline-secondary btn-sm">JSON</button><button id="downloadHtml" class="btn btn-outline-secondary btn-sm">HTML</button></div>
+</div></div>
+
+<!-- Modals -->
+<div class="modal fade" id="modalAssign" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5>Asignar tipo de vehículo a conductores</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="assignTableWrap" class="table-responsive"><table class="table table-sm" id="assignTable"><thead><tr><th>Conductor</th><th>Vehículo</th><th>Tipo</th></tr></thead><tbody></tbody></table></div><div class="d-flex gap-2"><button id="saveAssign" class="btn btn-primary btn-sm">Guardar</button><button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button></div></div></div></div></div>
+
+<div class="modal fade" id="modalThresholds" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5>Umbrales</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="thresholdsEditor"></div><div class="d-flex gap-2 mt-3"><button id="saveThresholds" class="btn btn-primary btn-sm">Guardar</button><button id="loadRecommended" class="btn btn-outline-secondary btn-sm">Valores recomendados</button></div></div></div></div></div>
+
+<!-- Offcanvas: Manual de usuario -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="manualOffcanvas" style="width:min(700px,96vw)">
+  <div class="offcanvas-header" style="border-bottom:1px solid rgba(255,255,255,.08)">
+    <h5 class="offcanvas-title" style="color:var(--text-primary);font-weight:700">📖 Cómo funciona DriveIQ</h5>
+    <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body" id="manualBody" style="overflow-y:auto;padding:24px 20px 60px">
+    <p class="text-muted text-center py-4">Cargando manual...</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="app.js?v=175.0"></script>
+</body>
+</html>

@@ -1,0 +1,873 @@
+
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>DriveIQ — Análisis de Conducción</title>
+<link rel="icon" type="image/svg+xml" href="assets/driveiq-icon.svg">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#F97316">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DriveIQ">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=10.6">
+<script>(function(){
+  /* Aplicar tema guardado ANTES del primer render para evitar flash */
+  var t = localStorage.getItem('driveiq_theme') || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+  /* Aplicar fondo inmediatamente para evitar flash negro */
+  document.documentElement.style.background = t === 'dark' ? '#0B1220' : '#f6f8fb';
+  document.documentElement.style.colorScheme = t === 'dark' ? 'dark' : 'light';
+  /* Deshabilitar transiciones durante la carga inicial */
+  var s = document.createElement('style');
+  s.id = 'no-fouc';
+  s.textContent = '*,*::before,*::after{transition:none!important}';
+  document.head.appendChild(s);
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      var e = document.getElementById('no-fouc');
+      if(e) e.remove();
+      document.documentElement.style.background = '';
+      document.documentElement.style.colorScheme = '';
+    }, 50);
+  });
+  /* Captura ?token= de la URL (viene de POST /auth de GPSwox) — limpia la URL de inmediato */
+  var p = new URLSearchParams(window.location.search);
+  var tk = p.get('token');
+  if (tk) {
+    try {
+      localStorage.setItem('driveiq_token', tk);
+      localStorage.setItem('driveiq_last_token', tk);
+    } catch(_) {}
+    window.history.replaceState({}, '', window.location.origin + window.location.pathname);
+  }
+  /* Captura #s=SID del hash (viene de POST /auth de GPSwox) */
+  var h = window.location.hash;
+  if (h && h.indexOf('s=') !== -1) {
+    var hs = new URLSearchParams(h.slice(1));
+    var sid = hs.get('s');
+    if (sid) {
+      try { sessionStorage.setItem('_diq_pending_sid', sid); } catch(_) {}
+      window.history.replaceState({}, '', window.location.origin + window.location.pathname);
+    }
+  }
+})();</script>
+<style>
+#diq-static-loader{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:var(--bg-main,#f6f8fb)}
+[data-theme="dark"] #diq-static-loader{background:#0B1220}
+</style>
+</head>
+<body>
+
+<!-- Loader estático — visible desde el primer render, antes de que cargue el JS -->
+<div id="diq-static-loader">
+  <div style="text-align:center">
+    <img src="assets/driveiq-icon.svg" style="width:72px;height:72px;margin-bottom:20px;opacity:.9" alt="">
+    <div style="font-size:1rem;font-weight:600;color:#f97316;margin-bottom:8px">Estamos cargando sus datos</div>
+    <div style="font-size:.8rem;color:#9ca3af">Un momento por favor…</div>
+  </div>
+</div>
+
+<nav class="navbar" id="topbar">
+  <div class="container-fluid d-flex align-items-stretch" style="padding:0">
+    <div class="topbar-brand">
+      <img src="assets/driveiq-icon.svg" class="topbar-brand-icon" alt="DriveIQ">
+      <div class="topbar-brand-text">
+        <div class="h4 mb-0" id="appName">DriveIQ</div>
+        <small id="appSubtitle">Inteligencia de conducción y análisis de rendimiento</small>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <a id="openThresholds" class="diq-nav-link" href="#">Umbrales</a>
+      <a id="openAssignTypes" class="diq-nav-link" href="#">Tipos de vehículo</a>
+      <a class="diq-nav-link" href="#" onclick="openReportsModal();return false">Reportes</a>
+      <a class="diq-nav-link" href="#" onclick="openSupervisorsModal();return false" id="navSupervisors" style="display:none;align-self:center">Supervisores</a>
+      <a class="diq-nav-link" href="#" onclick="openManual();return false">Manual</a>
+      <a href="https://driveiq.gpssoftwarenumberone.com/downloads/DriveIQ.apk" class="btn btn-sm" style="background:var(--accent-blue,#F97316);color:#fff;font-weight:700;border:none;border-radius:7px;padding:5px 12px;font-size:.78rem;text-decoration:none;display:flex;align-items:center;gap:5px" title="Descargar app Android">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        APK
+      </a>
+      <button id="alertBellBtn" class="btn btn-sm diq-nav-link" onclick="toggleAlertPanel()" title="Alertas en tiempo real" style="position:relative;background:none;border:none;padding:6px 8px;font-size:1.1rem;line-height:1">
+        🔔<span id="alertBadge" style="display:none;position:absolute;top:2px;right:2px;background:#f85149;color:#fff;border-radius:10px;font-size:.55rem;font-weight:700;padding:1px 4px;min-width:14px;text-align:center">0</span>
+      </button>
+      <button id="themeToggle" class="btn btn-sm theme-toggle-btn" title="Cambiar tema">
+        <span class="theme-icon-wrapper"><span id="themeIcon">🌙</span></span>
+        <span class="theme-label ms-2" id="themeLabel">Modo oscuro</span>
+      </button>
+      <input type="color" id="clientColor" title="Seleccionar color de cliente" value="#9e9e9e" style="display:none">
+    </div>
+  </div>
+</nav>
+
+<!-- ── Navegación de secciones ────────────────────────────────────────── -->
+<div class="diq-section-nav" id="sectionNav">
+  <button class="diq-snav-btn active" data-section="inicio"        onclick="scrollToSection('inicio')">Inicio</button>
+  <button class="diq-snav-btn"        data-section="conductores"   onclick="scrollToSection('conductores')">Conductores</button>
+  <button class="diq-snav-btn"        data-section="coaching"      onclick="scrollToSection('coaching')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-1px"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Coaching
+  </button>
+  <button class="diq-snav-btn"        data-section="ranking"       onclick="scrollToSection('ranking')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-1px"><polyline points="18 20 18 10"/><polyline points="12 20 12 4"/><polyline points="6 20 6 14"/></svg>Ranking
+  </button>
+  <button class="diq-snav-btn"        data-section="indicadores"   onclick="scrollToSection('indicadores')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-1px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Impacto
+  </button>
+  <button class="diq-snav-btn"        data-section="analisis"      onclick="scrollToSection('analisis')">Análisis</button>
+  <button class="diq-snav-btn"        data-section="comparativa"   onclick="scrollToSection('comparativa')">Comparativa</button>
+  <button class="diq-snav-btn"        data-section="roi"           onclick="scrollToSection('roi')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-1px"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>ROI
+  </button>
+  <button class="diq-snav-btn"        data-section="retos"         onclick="scrollToSection('retos')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-1px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>Retos
+  </button>
+  <button class="diq-snav-btn"        data-section="vehiculovs"    onclick="scrollToSection('vehiculovs')">Veh vs Conductor</button>
+  <button class="diq-snav-btn"        data-section="eventos"       onclick="scrollToSection('eventos')">Eventos</button>
+</div>
+
+<div class="container-fluid mt-3">
+<!-- ═══ Hero Metrics ══════════════════════════════════════════════════ -->
+<div id="heroRow" class="row g-3 mb-3">
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card kpi-card-amber">
+      <div class="kpi-top">
+        <svg class="kpi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="kpi-badge" id="kpiScoreBadge"></span>
+      </div>
+      <div class="kpi-value" id="kpiScoreVal">—</div>
+      <div class="kpi-label">Puntaje de flota</div>
+      <div class="kpi-bar-track"><div class="kpi-bar-fill" id="kpiScoreBar" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card kpi-card-blue">
+      <div class="kpi-top">
+        <svg class="kpi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span class="kpi-badge kpi-badge-blue" id="kpiDriversBadge"></span>
+      </div>
+      <div class="kpi-value" id="kpiDriversVal">—</div>
+      <div class="kpi-label">Conductores asignados</div>
+      <div class="kpi-bar-track"><div class="kpi-bar-fill kpi-fill-blue" id="kpiDriversBar" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card kpi-card-red">
+      <div class="kpi-top">
+        <svg class="kpi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span class="kpi-badge kpi-badge-red" id="kpiEventsBadge"></span>
+      </div>
+      <div class="kpi-value" id="kpiEventsVal">—</div>
+      <div class="kpi-label">Eventos detectados</div>
+      <div class="kpi-bar-track"><div class="kpi-bar-fill kpi-fill-red" id="kpiEventsBar" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="kpi-card kpi-card-green">
+      <div class="kpi-top">
+        <svg class="kpi-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        <span class="kpi-badge kpi-badge-green" id="kpiVehiclesBadge"></span>
+      </div>
+      <div class="kpi-value" id="kpiVehiclesVal">—</div>
+      <div class="kpi-label">Vehículos en flota</div>
+      <div class="kpi-bar-track"><div class="kpi-bar-fill kpi-fill-green" id="kpiVehiclesBar" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+
+  <div class="row">
+    <aside class="col-lg-3" id="sidebarPanel">
+      <!-- elementos legacy ocultos (usados por JS) -->
+      <span id="avgScoreSmall" style="display:none"></span>
+      <span id="numDrivers" style="display:none"></span>
+      <span id="numEvents" style="display:none"></span>
+
+      <div class="card mb-3 p-2">
+        <label class="mt-2">Vehículos</label>
+        <div id="filterVehicleContainer" class="filter-vehicle-panel mb-2">
+          <div class="filter-search-box">
+            <input type="text" id="vehicleSearch" class="form-control form-control-sm" placeholder="Buscar vehículo...">
+          </div>
+          <div class="filter-select-all-row">
+            <label class="filter-checkbox-item">
+              <input type="checkbox" id="selectAllVehicles" class="filter-checkbox">
+              <span id="selectAllVehiclesLabel">Todos</span>
+            </label>
+            <span id="vehicleSelectionCount" class="filter-count-badge"></span>
+          </div>
+          <div id="vehicleGroupsContainer" class="filter-groups-tree"></div>
+        </div>
+        <label>Conductores</label>
+        <div id="filterDriverContainer" class="filter-checkbox-container mb-2">
+          <div class="filter-checkbox-header">
+            <label class="filter-checkbox-item">
+              <input type="checkbox" id="selectAllDrivers" class="filter-checkbox">
+              <span id="selectAllDriversLabel">Seleccionar todos</span>
+            </label>
+          </div>
+          <div id="driverListContainer" class="filter-list-container"></div>
+        </div>
+        <label>Rango de fechas</label><input id="startDate" type="date" class="form-control form-control-sm mb-1"><input id="endDate" type="date" class="form-control form-control-sm mb-2">
+        <label>Rangos rápidos</label><select id="quickRange" class="form-select form-select-sm mb-2"><option value="last30" selected>Últimos 30 días</option><option value="today">Hoy</option><option value="yesterday">Ayer</option><option value="last7">Últimos 7 días</option><option value="last_month">Mes pasado</option></select>
+      </div>
+    </aside>
+
+    <main class="col-lg-9">
+      <div class="card mb-3" id="driversSection">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Conductores y rendimiento</h5>
+          <div style="display:flex;align-items:center;gap:16px">
+            <span id="driversDebugStrip" style="font-size:11px;color:var(--text-secondary)"></span>
+            <span><span id="totalDrivers">0</span> conductores</span>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-striped mb-0" id="driversTable">
+              <thead class="table-light"><tr><th>Conductor</th><th class="d-none d-lg-table-cell">Vehículo</th><th>Tipo</th><th>Eventos</th><th><span class="score-header" id="scoreHeader">Puntuación <span class="score-header-arrow">▼</span></span></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="driversPaginator"></div>
+      </div>
+
+      <div class="card mb-3" id="chartSection">
+        <div class="ev-chart-header">
+          <div>
+            <div class="ev-chart-title">Distribución de eventos</div>
+            <div class="ev-chart-sub">Por tipo en el período seleccionado</div>
+          </div>
+          <div class="ev-chart-total" id="evChartTotal"></div>
+        </div>
+        <div id="eventChart" class="ev-chart-body"></div>
+      </div>
+
+      <div class="card mb-3" id="eventsSection"><div class="card-body"><h6>Tabla de eventos</h6><div class="table-responsive"><table class="table table-sm" id="eventsTable"><thead class="table-light"><tr><th id="thTrip">Viaje</th><th>Conductor</th><th>Tipo</th><th>Severidad</th><th>Fecha</th><th>Velocidad</th><th>Ubicación</th></tr></thead><tbody></tbody></table></div></div><div id="eventsPaginator"></div></div>
+
+      <!-- ══════════════════════════════════════════════════════════════
+           SECCIÓN COACHING
+           ══════════════════════════════════════════════════════════════ -->
+      <div id="coachingSection" class="mt-2" style="display:none">
+
+        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+          <div>
+            <h5 class="mb-0">Plan de coaching por conductor</h5>
+            <small class="text-muted">Recomendaciones automáticas basadas en patrones de conducción del período activo</small>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <span class="diq-coaching-legend urgent">● Urgente</span>
+            <span class="diq-coaching-legend moderate">● Moderado</span>
+            <span class="diq-coaching-legend good">● Buen nivel</span>
+          </div>
+        </div>
+
+        <div id="coachingGrid" class="diq-coaching-grid"></div>
+
+      </div><!-- /coachingSection -->
+
+      <!-- ══════════════════════════════════════════════════════════════
+           SECCIÓN RANKING
+           ══════════════════════════════════════════════════════════════ -->
+      <div id="rankingSection" class="diq-ranking-section mt-2" style="display:none">
+
+        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+          <div>
+            <h5 class="mb-0">Ranking de conductores</h5>
+            <small class="text-muted">Clasificación por puntaje en el período activo</small>
+          </div>
+          <div class="diq-rank-period-tabs" id="rankPeriodTabs">
+            <button class="diq-rpt-btn active" data-period="current" onclick="switchRankPeriod('current',this)">Período activo</button>
+            <button class="diq-rpt-btn" data-period="month"   onclick="switchRankPeriod('month',this)">Este mes</button>
+            <button class="diq-rpt-btn" data-period="week"    onclick="switchRankPeriod('week',this)">Esta semana</button>
+          </div>
+        </div>
+
+        <!-- Podio top 3 -->
+        <div id="rankingPodium" class="diq-podium mb-4"></div>
+
+        <!-- Lista completa -->
+        <div class="card">
+          <div class="card-body p-0">
+            <table class="table mb-0" id="rankingTable">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:48px">#</th>
+                  <th>Conductor</th>
+                  <th class="d-none d-md-table-cell">Vehículo</th>
+                  <th class="d-none d-lg-table-cell text-center">Eventos</th>
+                  <th class="text-center">Percentil</th>
+                  <th class="text-center">Score</th>
+                </tr>
+              </thead>
+              <tbody id="rankingTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /rankingSection -->
+
+      <!-- ══════════════════════════════════════════════════════════════
+           SECCIÓN INDICADORES DE IMPACTO
+           ══════════════════════════════════════════════════════════════ -->
+      <div id="indicadoresSection" class="diq-impact-section mt-2" style="display:none">
+
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <h5 class="mb-0">Indicadores de impacto operacional</h5>
+            <small class="text-muted">Estimaciones del período activo basadas en eventos de conducción</small>
+          </div>
+          <span class="diq-imp-period-badge" id="impPeriodBadge">—</span>
+        </div>
+
+        <!-- Fila 1: Nocturno -->
+        <div class="diq-imp-group-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          Conducción nocturna (20:00 – 06:00)
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-6 col-lg-3">
+            <div class="diq-imp-card diq-imp-indigo">
+              <div class="diq-imp-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              </div>
+              <div class="diq-imp-val" id="impNightPct">—</div>
+              <div class="diq-imp-lbl">Eventos nocturnos</div>
+              <div class="diq-imp-sub" id="impNightCount">— de — total</div>
+              <div class="diq-imp-bar"><div class="diq-imp-bar-fill" id="impNightBar" style="width:0%"></div></div>
+            </div>
+          </div>
+          <div class="col-6 col-lg-3">
+            <div class="diq-imp-card diq-imp-dynamic" id="impNightRiskCard">
+              <div class="diq-imp-icon" id="impNightRiskIcon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <div class="diq-imp-val" id="impNightRisk">—</div>
+              <div class="diq-imp-lbl">Nivel de riesgo</div>
+              <div class="diq-imp-sub">Seguro &lt;15% · Alerta &gt;30%</div>
+            </div>
+          </div>
+          <div class="col-6 col-lg-3">
+            <div class="diq-imp-card diq-imp-blue">
+              <div class="diq-imp-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              </div>
+              <div class="diq-imp-val" id="impEvDay">—</div>
+              <div class="diq-imp-lbl">Eventos / día</div>
+              <div class="diq-imp-sub" id="impDaysSub">Período de — días</div>
+            </div>
+          </div>
+          <div class="col-6 col-lg-3">
+            <div class="diq-imp-card diq-imp-red">
+              <div class="diq-imp-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div class="diq-imp-val" id="impHighRisk">—</div>
+              <div class="diq-imp-lbl">Eventos críticos (alto)</div>
+              <div class="diq-imp-sub" id="impHighRiskPct">—% del total</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fila 2: Impacto económico/ambiental -->
+        <div class="diq-imp-group-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Impacto económico y ambiental estimado
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-6 col-lg-3">
+            <div class="diq-imp-card diq-imp-orange">
+              <div class="diq-imp-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V8l9-6 9 6v14"/><path d="M10 22V12h4v10"/></svg>
+              </div>
+              <div class="diq-imp-val" id="impFuel">—</div>
+              <div class="diq-imp-lbl">Litros combustible ahorrado</div>
+              <div class="diq-imp-sub">Estimado por frenadas/aceleraciones bruscas</div>
+            </div>
+          </div>
+          <div class="col-6 col-lg-3">
+            <div class="diq-imp-card diq-imp-green">
+              <div class="diq-imp-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M9 13h2l1 4 2-8 2 4h3"/></svg>
+              </div>
+              <div class="diq-imp-val" id="impCo2">—</div>
+              <div class="diq-imp-lbl">kg CO₂ reducidos</div>
+              <div class="diq-imp-sub">2.31 kg CO₂ por litro de combustible</div>
+            </div>
+          </div>
+          <div class="col-6 col-lg-3">
+            <div class="diq-imp-card diq-imp-emerald">
+              <div class="diq-imp-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+              </div>
+              <div class="diq-imp-val" id="impLowRisk">—</div>
+              <div class="diq-imp-lbl">Conductores bajo riesgo</div>
+              <div class="diq-imp-sub" id="impLowRiskCount">— sin eventos críticos</div>
+            </div>
+          </div>
+          <div class="col-6 col-lg-3">
+            <div class="diq-imp-card diq-imp-amber">
+              <div class="diq-imp-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div class="diq-imp-val" id="impScore">—</div>
+              <div class="diq-imp-lbl">Score promedio flota</div>
+              <div class="diq-imp-bar"><div class="diq-imp-bar-fill diq-imp-bar-amber" id="impScoreBar" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nota metodológica -->
+        <div class="diq-imp-note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Los valores de combustible y CO₂ son estimaciones orientativas basadas en promedios estadísticos (0.8 L por evento brusco · 2.31 kg CO₂/L). No reemplazan el análisis de telemetría de consumo real.
+        </div>
+
+      </div><!-- /indicadoresSection -->
+
+      <!-- ══════════════════════════════════════════════════════════════
+           SECCIÓN ANÁLISIS
+           ══════════════════════════════════════════════════════════════ -->
+      <div id="analisisSection" class="diq-analisis-section mt-2">
+
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <h5 class="mb-0">Análisis de tendencias</h5>
+            <small class="text-muted">Evolución histórica y patrones de conducción — últimos 6 meses</small>
+          </div>
+          <select id="analisisDriverSelect" class="form-select form-select-sm diq-driver-select">
+            <option value="">Toda la flota</option>
+          </select>
+        </div>
+
+        <!-- KPI strip -->
+        <div class="diq-analisis-kpi-strip mb-3">
+          <div class="diq-analisis-kpi-block">
+            <div class="diq-analisis-kpi-val" id="analisisScoreVal">—</div>
+            <div class="diq-analisis-kpi-label">Score actual</div>
+          </div>
+          <div class="diq-analisis-kpi-divider"></div>
+          <div class="diq-analisis-kpi-block">
+            <div class="diq-analisis-kpi-val" id="analisisTrendVal">—</div>
+            <div class="diq-analisis-kpi-label">vs mes anterior</div>
+          </div>
+          <div class="diq-analisis-kpi-divider"></div>
+          <div class="diq-analisis-kpi-block">
+            <div class="diq-analisis-kpi-val" id="analisisNightVal">—</div>
+            <div class="diq-analisis-kpi-label">Nocturno prom.</div>
+          </div>
+          <div class="diq-analisis-kpi-divider"></div>
+          <div class="diq-analisis-kpi-block">
+            <div class="diq-analisis-kpi-val" id="analisisEventsVal">—</div>
+            <div class="diq-analisis-kpi-label">Eventos / día</div>
+          </div>
+        </div>
+
+        <!-- Score trend -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0">Evolución del score</h6>
+              <span id="analisisScoreTrendBadge" class="diq-trend-badge"></span>
+            </div>
+            <div style="height:180px;position:relative"><canvas id="scoreTrendChart"></canvas></div>
+            <div id="scoreTrendPills" class="diq-month-pills mt-3"></div>
+          </div>
+        </div>
+
+        <!-- Events trend -->
+        <div class="card mb-3">
+          <div class="card-body">
+            <h6 class="mb-3">Eventos por mes</h6>
+            <div style="height:150px;position:relative"><canvas id="eventsTrendChart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Week + Night -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <div class="card h-100">
+              <div class="card-body">
+                <h6 class="mb-3">Semana típica</h6>
+                <div style="height:140px;position:relative"><canvas id="weekPatternChart"></canvas></div>
+                <p class="text-muted small mt-2 mb-0" id="worstDayMsg"></p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card h-100">
+              <div class="card-body">
+                <h6 class="mb-3">Conducción nocturna (20:00–06:00)</h6>
+                <div style="height:140px;position:relative"><canvas id="nightByMonthChart"></canvas></div>
+                <p class="text-muted small mt-2 mb-0" id="nightSummaryMsg"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Logros -->
+        <div class="card mb-4">
+          <div class="card-body">
+            <h6 class="mb-3">Logros de conductores</h6>
+            <div id="badgesGrid"></div>
+          </div>
+        </div>
+
+        <!-- Comparativa sectorial -->
+        <div class="card mb-4" id="benchmarkingSection">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <div>
+                <h6 class="mb-0">Comparativa sectorial</h6>
+                <small class="text-muted">Tu flota vs rangos de referencia por sector</small>
+              </div>
+              <select id="benchSectorSelect" class="form-select form-select-sm diq-driver-select" style="width:auto" onchange="renderBenchmarking()">
+                <option value="logistica">Logística y distribución</option>
+                <option value="escolar">Transporte escolar</option>
+                <option value="carga">Carga pesada</option>
+                <option value="ejecutivo">Transporte ejecutivo</option>
+                <option value="campo">Campo / minería</option>
+              </select>
+            </div>
+            <div id="benchmarkingGrid"></div>
+          </div>
+        </div>
+
+        <!-- ROI Calculator -->
+        <div class="card mb-4" id="roiSection" style="display:none">
+          <div class="card-body" id="roiBody"></div>
+        </div>
+
+        <!-- Retos de desempeño -->
+        <div class="card mb-4" id="retosSection" style="display:none">
+          <div class="card-body" id="retosBody"></div>
+        </div>
+
+        <!-- Score vehículo vs conductor -->
+        <div class="card mb-4" id="vehiculoVsSection" style="display:none">
+          <div class="card-body" id="vehiculoVsBody"></div>
+        </div>
+
+      </div><!-- /analisisSection -->
+
+    </main>
+  </div>
+</div>
+
+<!-- Offcanvas: detalle -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="driverDetail"><div class="offcanvas-header"><h5 id="driverDetailLabel">Detalle conductor</h5><button class="btn-close" data-bs-dismiss="offcanvas"></button></div>
+<div class="offcanvas-body">
+  <div id="driverHeader" class="d-flex align-items-center gap-2 mb-3"><div id="vehicleSourceIcon" style="font-size:20px"></div><div><h5 id="detailDriverName"></h5><div id="detailVehicleName"></div></div></div>
+  <div id="detailScoreBlock" style="margin-bottom:10px"></div><hr/>
+  <h6>Eventos</h6><div class="table-responsive"><table class="table table-sm" id="detailEventsTable"><thead><tr><th id="thTripDetail">Viaje</th><th>Tipo</th><th>Severidad</th><th>Fecha</th><th>Ubicación</th></tr></thead><tbody></tbody></table></div><hr/>
+  <div id="servicesContainer"></div>
+  <hr/>
+  <div id="driverCoachingBlock"></div>
+  <div class="d-flex gap-2"><button id="downloadPdf" class="btn btn-primary btn-sm">PDF</button><button id="downloadXls" class="btn btn-outline-secondary btn-sm">Excel</button><button id="downloadCsv" class="btn btn-outline-secondary btn-sm">CSV</button><button id="downloadJson" class="btn btn-outline-secondary btn-sm">JSON</button></div>
+</div></div>
+
+<!-- Modals -->
+<div class="modal fade" id="modalAssign" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content asn-modal">
+      <div class="modal-header asn-header">
+        <div class="asn-header-left">
+          <div>
+            <div class="asn-title">Tipos de vehículo</div>
+            <div class="asn-subtitle">Asigne el tipo a cada unidad para activar la medición de conducción</div>
+          </div>
+        </div>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="asn-toolbar">
+        <input id="asnSearch" type="text" class="asn-search" placeholder="Buscar vehículo…">
+        <span class="asn-bulk-label">Asignar todos:</span>
+        <button class="asn-bulk-btn" id="asnBtnCar"        onclick="assignAllType('car')">Auto</button>
+        <button class="asn-bulk-btn" id="asnBtnCamioneta"  onclick="assignAllType('camioneta')">Camioneta</button>
+        <button class="asn-bulk-btn" id="asnBtnTruck"      onclick="assignAllType('truck')">Camión</button>
+        <button class="asn-bulk-btn" id="asnBtnMinibus"    onclick="assignAllType('minibus')">Minibús</button>
+        <button class="asn-bulk-btn" id="asnBtnBus"        onclick="assignAllType('bus')">Bus</button>
+        <button class="asn-bulk-btn" id="asnBtnTractomula" onclick="assignAllType('tractomula')">Tractomula</button>
+        <button class="asn-bulk-btn" id="asnBtnMoto"       onclick="assignAllType('moto')">Moto</button>
+        <div class="asn-stats" id="asnStats">0 / 0 asignados</div>
+      </div>
+      <div class="modal-body asn-body p-0">
+        <table class="table table-sm asn-table" id="assignTable">
+          <colgroup><col><col></colgroup>
+          <thead>
+            <tr>
+              <th>Vehículo</th>
+              <th>Tipo asignado</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="modal-footer asn-footer">
+        <span id="asnSaveHint" class="asn-save-hint"></span>
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button id="saveAssign" class="asn-save-btn">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalThresholds" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="me-auto">Umbrales de conducción</h5><button id="openProfiles" class="btn btn-outline-secondary btn-sm calib-btn me-2">◧ Perfiles sectoriales</button><button id="runCalibration" class="btn btn-outline-secondary btn-sm calib-btn me-3">✦ Calibrar con mi flota</button><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="thresholdsEditor"></div><div class="d-flex gap-2 mt-3"><button id="saveThresholds" class="btn btn-primary btn-sm">Guardar</button><button id="loadRecommended" class="btn btn-outline-secondary btn-sm">Valores recomendados</button></div></div></div></div></div>
+
+<div class="modal fade" id="modalCalibration" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content"><div class="modal-header"><h5>Calibración adaptativa de umbrales</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="calibrationBody"></div><div class="modal-footer"><button id="applyCalibration" class="btn btn-primary btn-sm">Aplicar seleccionados</button><button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button></div></div></div></div>
+
+<div class="modal fade" id="modalProfiles" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5>Perfiles sectoriales</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="profilesBody"></div><div class="modal-footer"><button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button></div></div></div></div>
+
+<!-- Offcanvas: Manual de usuario -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="manualOffcanvas" style="width:min(700px,96vw)">
+  <div class="offcanvas-header" style="border-bottom:1px solid rgba(255,255,255,.08)">
+    <h5 class="offcanvas-title" style="color:var(--text-primary);font-weight:700">📖 Cómo funciona DriveIQ</h5>
+    <button class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body" id="manualBody" style="overflow-y:auto;padding:24px 20px 60px">
+    <p class="text-muted text-center py-4">Cargando manual...</p>
+  </div>
+</div>
+
+<!-- ═══ Modal Reportes ═══════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalReports" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content rpt-modal">
+      <div class="modal-header rpt-header">
+        <div class="rpt-header-brand">
+          <img src="assets/driveiq-icon.svg" class="rpt-header-icon" alt="">
+          <div>
+            <div class="rpt-header-title">Generar informe</div>
+            <div class="rpt-header-sub">Configure el período, vehículos y formato de exportación</div>
+          </div>
+        </div>
+        <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body rpt-body" id="reportModalBody">
+        <div class="rpt-grid">
+
+          <!-- ── Columna izquierda ───────────────────────────────────── -->
+          <div class="rpt-col">
+
+            <!-- Período -->
+            <div class="rpt-section">
+              <div class="rpt-section-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Período de análisis
+              </div>
+              <div class="rpt-quick-ranges" id="rptQuickRanges">
+                <button class="rpt-range-btn" data-range="today">Hoy</button>
+                <button class="rpt-range-btn" data-range="yesterday">Ayer</button>
+                <button class="rpt-range-btn rpt-range-active" data-range="last7">7 días</button>
+                <button class="rpt-range-btn" data-range="last30">30 días</button>
+                <button class="rpt-range-btn" data-range="last_month">Mes pasado</button>
+              </div>
+              <div class="rpt-dates">
+                <div class="rpt-date-field">
+                  <label>Desde</label>
+                  <input type="date" id="rptFrom" class="form-control rpt-date-input">
+                </div>
+                <div class="rpt-date-sep">→</div>
+                <div class="rpt-date-field">
+                  <label>Hasta</label>
+                  <input type="date" id="rptTo" class="form-control rpt-date-input">
+                </div>
+              </div>
+            </div>
+
+            <!-- Vehículos -->
+            <div class="rpt-section rpt-section-grow">
+              <div class="rpt-section-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                Vehículos incluidos
+                <span class="rpt-sel-count" id="rptSelCount"></span>
+              </div>
+              <div class="rpt-vehicle-search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="rptVehicleSearch" placeholder="Buscar vehículo o grupo…" class="rpt-search-input">
+              </div>
+              <div class="rpt-vehicle-list" id="rptVehicleList"></div>
+            </div>
+          </div>
+
+          <!-- ── Columna derecha ─────────────────────────────────────── -->
+          <div class="rpt-col rpt-col-right">
+
+            <!-- Formato -->
+            <div class="rpt-section">
+              <div class="rpt-section-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Formato de exportación
+              </div>
+              <div class="rpt-formats" id="rptFormats">
+                <label class="rpt-fmt-card rpt-fmt-active" data-type="pdf">
+                  <input type="checkbox" checked hidden>
+                  <div class="rpt-fmt-icon rpt-fmt-pdf">PDF</div>
+                  <div class="rpt-fmt-name">PDF</div>
+                  <div class="rpt-fmt-desc">Documento imprimible</div>
+                </label>
+                <label class="rpt-fmt-card rpt-fmt-active" data-type="xlsx">
+                  <input type="checkbox" checked hidden>
+                  <div class="rpt-fmt-icon rpt-fmt-xlsx">XLS</div>
+                  <div class="rpt-fmt-name">Excel</div>
+                  <div class="rpt-fmt-desc">Hoja de cálculo</div>
+                </label>
+                <label class="rpt-fmt-card" data-type="csv">
+                  <input type="checkbox" hidden>
+                  <div class="rpt-fmt-icon rpt-fmt-csv">CSV</div>
+                  <div class="rpt-fmt-name">CSV</div>
+                  <div class="rpt-fmt-desc">Datos separados por coma</div>
+                </label>
+                <label class="rpt-fmt-card" data-type="json">
+                  <input type="checkbox" hidden>
+                  <div class="rpt-fmt-icon rpt-fmt-json">{ }</div>
+                  <div class="rpt-fmt-name">JSON</div>
+                  <div class="rpt-fmt-desc">Para integraciones</div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Resumen previo -->
+            <div class="rpt-section rpt-preview-section">
+              <div class="rpt-section-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Vista previa
+              </div>
+              <div class="rpt-preview-grid" id="rptPreview">
+                <div class="rpt-prev-item"><span class="rpt-prev-val" id="rptPrevDrivers">—</span><span class="rpt-prev-lbl">Conductores</span></div>
+                <div class="rpt-prev-item"><span class="rpt-prev-val" id="rptPrevVehicles">—</span><span class="rpt-prev-lbl">Vehículos</span></div>
+                <div class="rpt-prev-item"><span class="rpt-prev-val" id="rptPrevEvents">—</span><span class="rpt-prev-lbl">Eventos</span></div>
+                <div class="rpt-prev-item"><span class="rpt-prev-val" id="rptPrevScore">—</span><span class="rpt-prev-lbl">Puntaje prom.</span></div>
+              </div>
+            </div>
+
+            <!-- Botón generar -->
+            <div class="rpt-generate-wrap">
+              <button id="btnGenerate" class="rpt-generate-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="18"/><line x1="15" y1="15" x2="12" y2="18"/></svg>
+                Generar informe
+              </button>
+              <button onclick="openEmailReportModal();return false" style="width:100%;margin-top:8px;padding:10px;background:none;border:1px solid var(--border-soft,#e5e7eb);border-radius:8px;cursor:pointer;font-size:.85rem;color:var(--text-muted,#6b7280);display:flex;align-items:center;justify-content:center;gap:8px">
+                📧 Configurar envío por email
+              </button>
+              <p class="rpt-generate-hint">Asigne tipos de vehículo antes de generar</p>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Panel de alertas en tiempo real ══════════════════════════════════ -->
+<div id="alertPanel" style="display:none;position:fixed;top:58px;right:12px;width:340px;max-height:420px;background:var(--bg-panel,#fff);border:1px solid var(--border-soft,#e5e7eb);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:1050;overflow:hidden;flex-direction:column">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border-soft,#e5e7eb)">
+    <span style="font-weight:700;font-size:.9rem">🔔 Alertas en tiempo real</span>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button onclick="clearAlerts()" style="background:none;border:none;font-size:.75rem;color:var(--text-muted,#6b7280);cursor:pointer;padding:2px 6px">Marcar leídas</button>
+      <button onclick="toggleAlertPanel()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;line-height:1">✕</button>
+    </div>
+  </div>
+  <div id="alertList" style="overflow-y:auto;flex:1;padding:8px 0">
+    <div style="padding:20px;text-align:center;color:var(--text-muted,#9ca3af);font-size:.85rem">Sin alertas recientes</div>
+  </div>
+</div>
+
+<!-- ═══ Modal Supervisores ════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalSupervisors" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content" style="background:var(--bg-panel,#fff);border:1px solid var(--border-soft,#e5e7eb)">
+      <div class="modal-header" style="border-bottom:1px solid var(--border-soft,#e5e7eb)">
+        <h5 class="modal-title" style="font-weight:700">👥 Gestión de Supervisores</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="supervisorsModalBody" style="padding:20px">
+        <div style="text-align:center;color:var(--text-muted,#9ca3af)">Cargando...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal Email Reportes ═════════════════════════════════════════════ -->
+<div class="modal fade" id="modalEmailReport" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:480px">
+    <div class="modal-content" style="background:var(--bg-panel,#fff);border:1px solid var(--border-soft,#e5e7eb)">
+      <div class="modal-header" style="border-bottom:1px solid var(--border-soft,#e5e7eb)">
+        <h5 class="modal-title" style="font-weight:700">📧 Reportes por email</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="emailReportBody" style="padding:20px">
+        <div style="text-align:center;color:var(--text-muted,#9ca3af)">Cargando...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile sidebar backdrop -->
+<div id="sidebarBackdrop" class="sidebar-backdrop" onclick="closeMobileSidebar()"></div>
+
+<!-- Mobile bottom navigation -->
+<nav id="mobileBottomNav" class="mobile-bottom-nav">
+  <button class="mob-nav-item active" onclick="mobileNavTo('inicio',this)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    <span>Inicio</span>
+  </button>
+  <button class="mob-nav-item" onclick="mobileNavTo('conductores',this)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    <span>Conductores</span>
+  </button>
+  <button class="mob-nav-item" onclick="mobileNavTo('ranking',this)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 20 18 10"/><polyline points="12 20 12 4"/><polyline points="6 20 6 14"/></svg>
+    <span>Ranking</span>
+  </button>
+  <button class="mob-nav-item" onclick="mobileNavTo('impacto',this)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    <span>Impacto</span>
+  </button>
+  <button class="mob-nav-item" onclick="mobileNavTo('analisis',this)">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    <span>Análisis</span>
+  </button>
+</nav>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="app.js?v=202.4"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  // Limpiar service workers viejos del scope /driveiq/ y registrar en /
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister());
+  });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .catch(() => {});
+  });
+}
+</script>
+
+<!-- Botón volver arriba -->
+<button id="btnBackToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Volver al menú"
+  style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:1040;
+         background:var(--accent-blue,#f97316);color:#fff;border:none;border-radius:50px;
+         padding:10px 22px;font-size:.85rem;font-weight:700;cursor:pointer;
+         box-shadow:0 4px 18px rgba(0,0,0,.2);white-space:nowrap">
+  ↑ Subir al menú
+</button>
+<script>
+(function(){
+  var btn = document.getElementById('btnBackToTop');
+  window.addEventListener('scroll', function(){
+    btn.style.display = window.scrollY > 400 ? 'block' : 'none';
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>

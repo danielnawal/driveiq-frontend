@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>DriveIQ – Dashboard Completo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+:root{
+  --bg:#0b1020; --panel:#111a33; --panel2:#0f1730; --line:#243156;
+  --txt:#e8eeff; --muted:#9aa7d6;
+  --good:#22c55e; --warn:#fbbf24; --bad:#ef4444;
+  --accent:#60a5fa;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,Arial,sans-serif;background:var(--bg);color:var(--txt)}
+.wrap{max-width:1200px;margin:auto;padding:20px}
+h1{margin:0;font-size:22px}
+.sub{color:var(--muted);font-size:13px;margin:6px 0 14px}
+
+.card{
+  background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px;
+  margin-bottom:14px;
+}
+
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.spacer{flex:1}
+
+input,select,button{
+  background:var(--panel2);
+  color:var(--txt);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:13px;
+}
+button{cursor:pointer}
+button:hover{border-color:var(--accent)}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+  font-size:13px;
+}
+th,td{
+  padding:10px;
+  border-bottom:1px solid var(--line);
+  text-align:left;
+}
+th{color:var(--muted);cursor:pointer}
+
+.col-pos{width:70px}
+.col-cond{width:24%}
+.col-veh{width:14%}
+.col-punt{width:14%}
+.col-est{width:12%}
+.col-act{width:18%}
+
+.badge{padding:4px 10px;border-radius:999px;font-weight:600;font-size:12px}
+.good{background:rgba(34,197,94,.2);color:var(--good)}
+.warn{background:rgba(251,191,36,.2);color:var(--warn)}
+.bad{background:rgba(239,68,68,.2);color:var(--bad)}
+
+.bar{height:8px;background:#1f2a4d;border-radius:6px;overflow:hidden;margin-top:4px}
+.bar>div{height:100%;background:linear-gradient(90deg,#60a5fa,#a78bfa)}
+
+canvas{width:100%;display:block;margin-top:10px}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpi{background:rgba(0,0,0,.15);border:1px solid var(--line);border-radius:12px;padding:10px}
+.kpi .l{font-size:12px;color:var(--muted)}
+.kpi .v{font-size:20px;font-weight:700;margin-top:4px}
+
+@media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+
+<h1>DriveIQ — Dashboard Completo</h1>
+<div class="sub">Ranking, análisis y reportes (PDF + Excel XLSX)</div>
+
+<div class="card row">
+  <label>Periodo:
+    <input type="month" id="period">
+  </label>
+
+  <label>Buscar:
+    <input id="q" placeholder="Conductor (driver_id)">
+  </label>
+
+  <label>Vehículo:
+    <select id="veh">
+      <option value="all">Todos</option>
+      <option value="automovil">Automóvil</option>
+      <option value="motocicleta">Motocicleta</option>
+      <option value="autobus">Autobús</option>
+      <option value="tractocamion">Tractocamión</option>
+    </select>
+  </label>
+
+  <label>Auto-actualizar:
+    <select id="autoref">
+      <option value="off" selected>Apagado</option>
+      <option value="60">Cada 60s</option>
+      <option value="120">Cada 120s</option>
+      <option value="300">Cada 300s</option>
+    </select>
+  </label>
+
+  <button id="btnLoad">Cargar</button>
+
+  <!-- Descargas -->
+  <button id="btnCSV">CSV</button>
+  <button id="btnJSON">JSON</button>
+  <button id="btnHTML">HTML</button>
+  <button id="btnPDF">PDF</button>
+  <button id="btnXLSX">Excel (XLSX)</button>
+
+  <span class="spacer"></span>
+  <small id="status">Listo</small>
+</div>
+
+<div class="card">
+  <div class="kpis">
+    <div class="kpi"><div class="l">Conductores (filtrados)</div><div class="v" id="kCount">—</div></div>
+    <div class="kpi"><div class="l">Puntaje máximo</div><div class="v" id="kMax">—</div></div>
+    <div class="kpi"><div class="l">Puntaje promedio</div><div class="v" id="kAvg">—</div></div>
+    <div class="kpi"><div class="l">Última carga</div><div class="v" id="kLoad" style="font-size:14px;font-weight:800">—</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin:0 0 8px">🏆 Ranking por conductor (mes seleccionado)</h3>
+  <div style="overflow:auto;border-radius:12px;border:1px solid var(--line)">
+    <table id="rankingTable">
+      <thead>
+        <tr>
+          <th class="col-pos" data-k="rank">Posición</th>
+          <th class="col-cond" data-k="driver_id">Conductor</th>
+          <th class="col-veh" data-k="vehicle_type">Vehículo</th>
+          <th class="col-punt" data-k="score">Puntaje</th>
+          <th class="col-est" data-k="estado_txt">Estado</th>
+          <th class="col-act" data-k="updated_at">Actualizado</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin:0 0 8px">📊 Promedio de puntaje (0–100) por tipo de vehículo</h3>
+  <canvas id="byVehicle" width="1000" height="260"></canvas>
+</div>
+
+<div class="card">
+  <h3 style="margin:0 0 8px">📈 Evolución mensual del puntaje promedio (últimos 6 meses)</h3>
+  <canvas id="evolution" width="1000" height="260"></canvas>
+</div>
+
+</div>
+
+<!-- Librerías (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.31/dist/jspdf.plugin.autotable.min.js"></script>
+
+<script>
+const API="/api/ranking";
+
+/* Estado */
+const S = {
+  raw: [],
+  filtered: [],
+  sortKey: "rank",
+  sortDir: "asc",
+  autorefTimer: null
+};
+
+const $ = (id)=>document.getElementById(id);
+
+function setStatus(msg){ $("status").textContent = msg; }
+function nowStr(){ return new Date().toLocaleString(); }
+
+function estadoFromScore(s){
+  if (!Number.isFinite(s)) return {txt:"Sin dato", cls:"warn"};
+  if (s>=80) return {txt:"Bueno", cls:"good"};
+  if (s>=50) return {txt:"Medio", cls:"warn"};
+  return {txt:"Bajo", cls:"bad"};
+}
+
+function fmtDate(iso){
+  if(!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
+
+function lastMonths(n){
+  const out=[], d=new Date();
+  for(let i=n-1;i>=0;i--){
+    const x=new Date(d.getFullYear(), d.getMonth()-i, 1);
+    out.push(x.toISOString().slice(0,7));
+  }
+  return out;
+}
+
+async function fetchPeriod(period){
+  const r = await fetch(`${API}?period=${encodeURIComponent(period)}`, { cache:"no-store" });
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  const j = await r.json();
+  return Array.isArray(j) ? j : [];
+}
+
+/* Carga */
+async function loadAll(){
+  const period = $("period").value;
+  if(!period){ alert("Seleccione un periodo (YYYY-MM)."); return; }
+
+  setStatus("Cargando…");
+  try{
+    const data = await fetchPeriod(period);
+
+    S.raw = data.map((x)=> {
+      const score = Number(x.score);
+      const driver_id = (x.driver_id ?? "").toString();
+      const vehicle_type = (x.vehicle_type ?? "").toString();
+      const updated_at = (x.updated_at ?? "").toString();
+      const est = estadoFromScore(score);
+      return {
+        rank: 0,
+        driver_id,
+        vehicle_type,
+        score,
+        updated_at,
+        estado_txt: est.txt,
+        estado_cls: est.cls
+      };
+    });
+
+    // Rank base por score desc
+    S.raw.sort((a,b)=>(Number.isFinite(b.score)?b.score:-Infinity)-(Number.isFinite(a.score)?a.score:-Infinity));
+    S.raw.forEach((x,i)=> x.rank = i+1);
+
+    applyFiltersAndRender();
+    renderByVehicle();          // barras
+    await renderEvolution();    // línea (6 meses)
+
+    $("kLoad").textContent = nowStr();
+    setStatus(`OK • Periodo ${period}`);
+  }catch(e){
+    console.log(e);
+    setStatus("Error cargando");
+    alert("No se pudo cargar el ranking. Revise el backend o el periodo.");
+  }
+}
+
+/* Filtros */
+function applyFilters(){
+  const q = $("q").value.trim().toLowerCase();
+  const veh = $("veh").value;
+
+  let rows=[...S.raw];
+  if(q) rows = rows.filter(x=>x.driver_id.toLowerCase().includes(q));
+  if(veh !== "all") rows = rows.filter(x=>x.vehicle_type === veh);
+
+  S.filtered = rows;
+}
+
+/* Orden */
+function sortRows(){
+  const dir = (S.sortDir==="asc") ? 1 : -1;
+  const k = S.sortKey;
+
+  S.filtered.sort((a,b)=>{
+    if(["driver_id","vehicle_type","estado_txt","updated_at"].includes(k)){
+      const as=(a[k]??"").toString().toLowerCase();
+      const bs=(b[k]??"").toString().toLowerCase();
+      if(as<bs) return -1*dir;
+      if(as>bs) return  1*dir;
+      return 0;
+    }
+    const an=Number(a[k]), bn=Number(b[k]);
+    const af=Number.isFinite(an), bf=Number.isFinite(bn);
+    if(!af && !bf) return 0;
+    if(!af) return 1;
+    if(!bf) return -1;
+    return (an-bn)*dir;
+  });
+}
+
+/* Render tabla + KPIs */
+function renderTable(){
+  const tb = $("tbody");
+  tb.innerHTML = "";
+
+  S.filtered.forEach((x,i)=>{
+    const score = Number.isFinite(x.score) ? x.score : 0;
+    const tr=document.createElement("tr");
+    tr.innerHTML = `
+      <td class="col-pos">${x.rank}</td>
+      <td class="col-cond">${escapeHtml(x.driver_id)}</td>
+      <td class="col-veh">${escapeHtml(x.vehicle_type)}</td>
+      <td class="col-punt">
+        ${Number.isFinite(x.score)?x.score:"—"}
+        <div class="bar"><div style="width:${Math.max(0,Math.min(100,score))}%"></div></div>
+      </td>
+      <td class="col-est"><span class="badge ${x.estado_cls}">${escapeHtml(x.estado_txt)}</span></td>
+      <td class="col-act">${escapeHtml(fmtDate(x.updated_at))}</td>
+    `;
+    tb.appendChild(tr);
+  });
+
+  const scores = S.filtered.map(x=>x.score).filter(Number.isFinite);
+  const max = scores.length ? Math.max(...scores) : NaN;
+  const avg = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length) : NaN;
+
+  $("kCount").textContent = String(S.filtered.length);
+  $("kMax").textContent = Number.isFinite(max) ? max.toFixed(1) : "—";
+  $("kAvg").textContent = Number.isFinite(avg) ? avg.toFixed(1) : "—";
+}
+
+function applyFiltersAndRender(){
+  applyFilters();
+  // mantener rank como default
+  sortRows();
+  renderTable();
+}
+
+function escapeHtml(s){
+  return (s ?? "").toString()
+    .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+
+/* Gráfico barras por vehículo (usa raw del periodo) */
+function renderByVehicle(){
+  const c = $("byVehicle");
+  const ctx = c.getContext("2d");
+  ctx.clearRect(0,0,c.width,c.height);
+
+  const g = {};
+  S.raw.forEach(x=>{
+    if(!g[x.vehicle_type]) g[x.vehicle_type] = [];
+    if(Number.isFinite(x.score)) g[x.vehicle_type].push(x.score);
+  });
+
+  const labels = Object.keys(g);
+  const values = labels.map(k=>{
+    const a=g[k];
+    return a.length ? a.reduce((p,q)=>p+q,0)/a.length : 0;
+  });
+
+  const p=40,w=c.width,h=c.height;
+  const max=Math.max(...values,100);
+  const step = labels.length ? (w-p*2)/labels.length : 1;
+  const bw = step*0.62;
+
+  ctx.strokeStyle="rgba(255,255,255,.10)";
+  ctx.beginPath(); ctx.moveTo(p,h-p); ctx.lineTo(w-p,h-p); ctx.stroke();
+
+  ctx.fillStyle="#60a5fa";
+  ctx.font="12px system-ui";
+
+  labels.forEach((l,i)=>{
+    const x=p+i*step+(step-bw)/2;
+    const bh=(values[i]/max)*(h-p*2);
+    const y=(h-p)-bh;
+    ctx.fillRect(x,y,bw,bh);
+    ctx.fillStyle="rgba(232,238,255,.85)";
+    ctx.fillText(l || "—", x, h-12);
+    ctx.fillStyle="#60a5fa";
+  });
+}
+
+/* Evolución mensual (6 meses) */
+async function renderEvolution(){
+  const c = $("evolution");
+  const ctx = c.getContext("2d");
+  ctx.clearRect(0,0,c.width,c.height);
+
+  const months = lastMonths(6);
+  const vals = [];
+  for(const m of months){
+    try{
+      const data = await fetchPeriod(m);
+      const scores = data.map(x=>Number(x.score)).filter(Number.isFinite);
+      const avg = scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : 0;
+      vals.push(avg);
+    }catch{
+      vals.push(0);
+    }
+  }
+
+  const p=42,w=c.width,h=c.height;
+  const max=Math.max(...vals,100);
+  const step=(w-p*2)/(months.length-1);
+
+  ctx.strokeStyle="rgba(255,255,255,.08)";
+  for(let i=0;i<=4;i++){
+    const y=p+i*((h-p*2)/4);
+    ctx.beginPath(); ctx.moveTo(p,y); ctx.lineTo(w-p,y); ctx.stroke();
+  }
+
+  ctx.strokeStyle="#60a5fa"; ctx.lineWidth=2;
+  ctx.beginPath();
+  vals.forEach((v,i)=>{
+    const x=p+i*step;
+    const y=(h-p)-(v/max)*(h-p*2);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle="rgba(167,139,250,.95)";
+  vals.forEach((v,i)=>{
+    const x=p+i*step;
+    const y=(h-p)-(v/max)*(h-p*2);
+    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+  });
+
+  ctx.fillStyle="rgba(232,238,255,.75)";
+  ctx.font="12px system-ui";
+  months.forEach((m,i)=>{
+    const x=p+i*step;
+    ctx.fillText(m, x-20, h-12);
+  });
+}
+
+/* ===== Exportaciones existentes ===== */
+function download(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportCSV(){
+  const period = $("period").value || "periodo";
+  const rows = S.filtered.map(x=>({
+    posicion: x.rank,
+    conductor: x.driver_id,
+    vehiculo: x.vehicle_type,
+    puntaje: Number.isFinite(x.score) ? x.score : "",
+    estado: x.estado_txt,
+    actualizado: x.updated_at || ""
+  }));
+  const headers = ["posicion","conductor","vehiculo","puntaje","estado","actualizado"];
+  const csv = [
+    headers.join(","),
+    ...rows.map(r => headers.map(h => `"${(r[h]??"").toString().replaceAll('"','""')}"`).join(","))
+  ].join("\n");
+  download(new Blob([csv],{type:"text/csv;charset=utf-8"}), `driveiq_ranking_${period}.csv`);
+}
+
+function exportJSON(){
+  const period = $("period").value || "periodo";
+  download(new Blob([JSON.stringify(S.filtered,null,2)],{type:"application/json"}), `driveiq_ranking_${period}.json`);
+}
+
+function exportHTML(){
+  const period = $("period").value || "periodo";
+  const tableHtml = document.getElementById("rankingTable").outerHTML;
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>DriveIQ – Ranking ${period}</title></head><body>${tableHtml}</body></html>`;
+  download(new Blob([html],{type:"text/html;charset=utf-8"}), `driveiq_ranking_${period}.html`);
+}
+
+/* ===== NUEVO: PDF (jsPDF + autoTable) ===== */
+function exportPDF(){
+  const period = $("period").value || "periodo";
+
+  if(!(window.jspdf && window.jspdf.jsPDF)){
+    alert("No se cargó la librería de PDF. Revise conexión a internet del navegador/servidor.");
+    return;
+  }
+  const doc = new window.jspdf.jsPDF({orientation:"landscape", unit:"pt", format:"a4"});
+  doc.setFontSize(14);
+  doc.text(`DriveIQ – Ranking por conductor (${period})`, 40, 40);
+
+  // autoTable lee desde el HTML de la tabla
+  if(typeof doc.autoTable !== "function"){
+    alert("No se cargó autoTable para PDF.");
+    return;
+  }
+
+  doc.autoTable({
+    html: "#rankingTable",
+    startY: 60,
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [17,26,51] },
+    theme: "grid"
+  });
+
+  doc.save(`driveiq_ranking_${period}.pdf`);
+}
+
+/* ===== NUEVO: XLSX real (SheetJS) ===== */
+function exportXLSX(){
+  const period = $("period").value || "periodo";
+
+  if(!(window.XLSX && XLSX.utils)){
+    alert("No se cargó la librería XLSX. Revise conexión a internet del navegador/servidor.");
+    return;
+  }
+
+  const rows = S.filtered.map(x=>({
+    "Posición": x.rank,
+    "Conductor": x.driver_id,
+    "Vehículo": x.vehicle_type,
+    "Puntaje": Number.isFinite(x.score) ? x.score : "",
+    "Estado": x.estado_txt,
+    "Actualizado": fmtDate(x.updated_at)
+  }));
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  // Ancho de columnas (para que se vea bonito)
+  ws["!cols"] = [
+    {wch:10},{wch:28},{wch:16},{wch:10},{wch:10},{wch:22}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, "Ranking");
+  XLSX.writeFile(wb, `driveiq_ranking_${period}.xlsx`);
+}
+
+/* ===== UI wiring ===== */
+function setup(){
+  // Mes actual
+  const d=new Date();
+  $("period").value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+
+  $("btnLoad").addEventListener("click", loadAll);
+
+  $("q").addEventListener("input", ()=>{ applyFiltersAndRender(); });
+  $("veh").addEventListener("change", ()=>{ applyFiltersAndRender(); });
+
+  $("btnCSV").addEventListener("click", exportCSV);
+  $("btnJSON").addEventListener("click", exportJSON);
+  $("btnHTML").addEventListener("click", exportHTML);
+
+  $("btnPDF").addEventListener("click", exportPDF);
+  $("btnXLSX").addEventListener("click", exportXLSX);
+
+  // Ordenar por encabezados
+  document.querySelectorAll("thead th[data-k]").forEach(th=>{
+    th.addEventListener("click", ()=>{
+      const k = th.getAttribute("data-k");
+      if(!k) return;
+      if(S.sortKey === k) S.sortDir = (S.sortDir==="asc") ? "desc" : "asc";
+      else { S.sortKey = k; S.sortDir = (k==="score") ? "desc" : "asc"; }
+      sortRows();
+      renderTable();
+    });
+  });
+
+  // Auto-actualización
+  $("autoref").addEventListener("change", ()=>{
+    if(S.autorefTimer){ clearInterval(S.autorefTimer); S.autorefTimer=null; }
+    const v = $("autoref").value;
+    if(v !== "off"){
+      const sec = Number(v);
+      if(Number.isFinite(sec) && sec>0){
+        S.autorefTimer = setInterval(loadAll, sec*1000);
+        setStatus(`Auto-actualizar cada ${sec}s`);
+      }
+    }
+  });
+
+  // Carga inicial
+  loadAll();
+}
+
+setup();
+</script>
+</body>
+</html>

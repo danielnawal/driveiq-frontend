@@ -1,0 +1,43 @@
+const USER_TOKEN = new URLSearchParams(window.location.search).get("token");
+
+function getApiBase() {
+  return "http://217.216.82.179:3100/api";
+}
+
+const API_BASE = getApiBase();
+
+async function loadDevices() {
+  try {
+    const response = await fetch(`${API_BASE}/devices?token=${USER_TOKEN}`);
+    const data = await response.json();
+
+    console.log("DATA:", data);
+
+    if (!data) {
+      document.body.innerHTML = "<h2>Error cargando datos</h2>";
+      return;
+    }
+
+    if (Array.isArray(data)) {
+      renderDevices(data);
+      return;
+    }
+
+    if (data.items || data.data) {
+      renderDevices(data.items || data.data);
+      return;
+    }
+
+    renderDevices(data);
+
+  } catch (e) {
+    console.error(e);
+    document.body.innerHTML = "<h2>Error conexión backend</h2>";
+  }
+}
+
+function renderDevices(data) {
+  document.body.innerHTML = "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
+}
+
+loadDevices();

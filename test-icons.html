@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Test Íconos DriveIQ</title>
+<style>
+  body { background: #111827; font-family: sans-serif; padding: 30px; color: #fff; }
+  h1 { color: #FBBF24; }
+  h2 { color: #FBBF24; border-bottom: 1px solid #333; padding-bottom: 8px; margin-top: 40px; }
+  .row { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 20px; }
+  .card { background: #1f2937; border-radius: 10px; padding: 16px 20px; text-align: center; }
+  .card p { color: #9ca3af; font-size: 12px; margin: 8px 0 0 0; }
+  svg { display: block; margin: 0 auto; }
+</style>
+</head>
+<body>
+<h1>Prueba de Íconos — DriveIQ</h1>
+<p style="color:#9ca3af">Dígame cuáles están bien y cuáles ajustar</p>
+
+<!-- ============================== MOTO ============================== -->
+<h2>Motocicleta — varias versiones</h2>
+<div class="row">
+
+  <div class="card">
+    <p>Versión A — Marco triángulo</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="20" cy="37" r="12"/>
+      <circle cx="80" cy="37" r="12"/>
+      <!-- horquilla delantera doble -->
+      <line x1="30" y1="22" x2="22" y2="36"/>
+      <line x1="33" y1="26" x2="24" y2="36"/>
+      <!-- tubo superior (top tube) -->
+      <line x1="30" y1="22" x2="63" y2="22"/>
+      <!-- tubo inferior (down tube) -->
+      <line x1="33" y1="26" x2="66" y2="36"/>
+      <!-- cadena (chain stay) -->
+      <line x1="66" y1="36" x2="80" y2="37"/>
+      <!-- soporte asiento (seat stay) -->
+      <line x1="63" y1="22" x2="80" y2="30"/>
+      <!-- depósito (tank hump) -->
+      <path d="M34,22 Q49,14 62,22"/>
+      <!-- asiento -->
+      <path d="M62,22 Q68,19 72,24"/>
+      <!-- manillar -->
+      <line x1="24" y1="15" x2="37" y2="15"/>
+      <line x1="30" y1="15" x2="30" y2="22"/>
+      <line x1="24" y1="15" x2="24" y2="19"/>
+      <line x1="37" y1="15" x2="37" y2="18"/>
+    </svg>
+  </div>
+
+  <div class="card">
+    <p>Versión B — Silueta externa</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="22" cy="37" r="12"/>
+      <circle cx="78" cy="37" r="12"/>
+      <!-- perfil exterior del cuerpo -->
+      <path d="M26,25 Q34,14 50,13 Q62,13 68,20 Q72,24 68,28 L65,37"/>
+      <path d="M34,37 Q34,25 26,25"/>
+      <!-- horquilla -->
+      <line x1="26" y1="25" x2="22" y2="33"/>
+      <!-- manillar T -->
+      <line x1="20" y1="17" x2="32" y2="17"/>
+      <line x1="26" y1="17" x2="26" y2="24"/>
+      <line x1="20" y1="17" x2="20" y2="21"/>
+      <line x1="32" y1="17" x2="32" y2="20"/>
+      <!-- tubo de escape -->
+      <path d="M34,38 Q28,43 16,42 L12,40"/>
+    </svg>
+  </div>
+
+  <div class="card">
+    <p>Versión C — Minimalista clara</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="21" cy="36" r="12"/>
+      <circle cx="79" cy="36" r="12"/>
+      <!-- bloque motor/chasis entre ruedas -->
+      <path d="M33,36 L36,26 L50,22 L64,26 L67,36"/>
+      <!-- depósito arriba -->
+      <path d="M36,26 Q50,16 64,26"/>
+      <!-- asiento trasero -->
+      <path d="M58,23 Q66,20 70,26"/>
+      <!-- guardabarro trasero -->
+      <path d="M67,30 Q76,26 83,30"/>
+      <!-- horquilla doble -->
+      <line x1="36" y1="26" x2="24" y2="35"/>
+      <line x1="38" y1="30" x2="25" y2="36"/>
+      <!-- manillar -->
+      <line x1="27" y1="16" x2="40" y2="19"/>
+      <line x1="33" y1="16" x2="36" y2="26"/>
+      <line x1="27" y1="16" x2="26" y2="20"/>
+      <line x1="40" y1="19" x2="40" y2="22"/>
+    </svg>
+  </div>
+
+  <div class="card">
+    <p>Versión D — Clásica deportiva</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="20" cy="36" r="12"/>
+      <circle cx="80" cy="36" r="12"/>
+      <!-- horquilla invertida -->
+      <line x1="27" y1="20" x2="21" y2="35"/>
+      <line x1="30" y1="24" x2="23" y2="36"/>
+      <!-- chasis principal -->
+      <path d="M28,20 L40,15 L62,15 L68,20 L66,36"/>
+      <!-- motor -->
+      <rect x="38" y="24" width="22" height="14" rx="2"/>
+      <!-- depósito -->
+      <path d="M38,24 Q50,18 62,24"/>
+      <!-- asiento/cola -->
+      <path d="M62,15 Q70,14 74,20 L72,24 L66,20"/>
+      <!-- manillar bajo (sport) -->
+      <line x1="25" y1="18" x2="34" y2="18"/>
+      <line x1="29" y1="18" x2="28" y2="20"/>
+    </svg>
+  </div>
+
+</div>
+
+<!-- ============================== AUTO ============================== -->
+<h2>Sedán / Auto</h2>
+<div class="row">
+  <div class="card">
+    <p>Actual</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3,38 L3,32 L9,32 L16,21 L28,14 L39,12 L67,12 L78,21 L87,30 L93,32 L96,32 L96,38 L86,38 A9,9 0 0 1 68,38 L32,38 A9,9 0 0 1 14,38 L3,38"/>
+      <circle cx="23" cy="38" r="9"/>
+      <circle cx="77" cy="38" r="9"/>
+      <line x1="39" y1="12" x2="37" y2="32"/>
+      <line x1="67" y1="12" x2="69" y2="32"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ============================== PICKUP ============================== -->
+<h2>Camioneta Pickup</h2>
+<div class="row">
+  <div class="card">
+    <p>Actual</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3,38 L3,32 L9,32 L14,20 L25,12 L50,12 L52,18 L52,38 L32,38 A9,9 0 0 1 14,38 L3,38"/>
+      <circle cx="23" cy="38" r="9"/>
+      <line x1="36" y1="12" x2="36" y2="32"/>
+      <path d="M52,23 L96,23 L96,38 L86,38 A9,9 0 0 1 68,38 L52,38"/>
+      <circle cx="77" cy="38" r="9"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ============================== CAMION ============================== -->
+<h2>Camión Caja</h2>
+<div class="row">
+  <div class="card">
+    <p>Actual</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3,38 L3,21 L7,16 L16,9 L35,9 L37,38 L27,38 A7,7 0 0 1 13,38 L3,38"/>
+      <line x1="9" y1="23" x2="14" y2="16"/>
+      <line x1="14" y1="16" x2="30" y2="16"/>
+      <line x1="30" y1="16" x2="30" y2="25"/>
+      <rect x="37" y="9" width="59" height="29"/>
+      <circle cx="20" cy="38" r="7"/>
+      <circle cx="61" cy="38" r="7"/>
+      <circle cx="79" cy="38" r="7"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ============================== MINIBUS ============================== -->
+<h2>Minibús / Van</h2>
+<div class="row">
+  <div class="card">
+    <p>Actual</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3,38 L3,20 L9,12 L16,11 L84,11 L91,14 L96,21 L96,38 L86,38 A9,9 0 0 1 68,38 L32,38 A9,9 0 0 1 14,38 L3,38"/>
+      <circle cx="23" cy="38" r="9"/>
+      <circle cx="77" cy="38" r="9"/>
+      <rect x="12" y="16" width="13" height="11" rx="2"/>
+      <rect x="30" y="16" width="13" height="11" rx="2"/>
+      <rect x="48" y="16" width="13" height="11" rx="2"/>
+      <rect x="66" y="16" width="13" height="11" rx="2"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ============================== BUS ============================== -->
+<h2>Bus</h2>
+<div class="row">
+  <div class="card">
+    <p>Actual</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3,38 L3,9 L97,9 L97,38 L86,38 A9,9 0 0 1 68,38 L32,38 A9,9 0 0 1 14,38 L3,38"/>
+      <circle cx="23" cy="38" r="9"/>
+      <circle cx="77" cy="38" r="9"/>
+      <rect x="7" y="14" width="11" height="9" rx="2"/>
+      <rect x="23" y="14" width="12" height="9" rx="2"/>
+      <rect x="41" y="14" width="12" height="9" rx="2"/>
+      <rect x="59" y="14" width="12" height="9" rx="2"/>
+      <rect x="77" y="14" width="11" height="9" rx="2"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ============================== TRACTOMULA ============================== -->
+<h2>Tractomula</h2>
+<div class="row">
+  <div class="card">
+    <p>Actual</p>
+    <svg viewBox="0 0 100 50" width="300" height="150" fill="none" stroke="#FBBF24" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3,38 L3,23 L7,16 L16,9 L32,9 L37,14 L39,38 L27,38 A7,7 0 0 1 13,38 L3,38"/>
+      <line x1="9" y1="23" x2="14" y2="16"/>
+      <line x1="14" y1="16" x2="29" y2="16"/>
+      <line x1="29" y1="16" x2="29" y2="25"/>
+      <rect x="42" y="12" width="54" height="26"/>
+      <circle cx="18" cy="38" r="7"/>
+      <circle cx="55" cy="38" r="7"/>
+      <circle cx="73" cy="38" r="7"/>
+      <circle cx="88" cy="38" r="7"/>
+    </svg>
+  </div>
+</div>
+
+</body>
+</html>
