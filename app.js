@@ -8,6 +8,10 @@ let USER_TOKEN = null;
 let LOADING = false;
 let USER_LANGUAGE = 'es'; // Valor por defecto, se actualiza desde GPSWOX
 let I18N = {}; // Traducciones cargadas dinámicamente
+// ?lang capturado por el script inline de index.html ANTES de limpiar la URL,
+// con respaldo a la URL actual por si el inline no corrió.
+const _URL_LANG = (window.__DIQ_LANG)
+  || (() => { try { return new URLSearchParams(location.search).get('lang'); } catch (e) { return null; } })();
 let USER_UNITS = 'metric'; // Unidades: 'metric' (km/h, km) o 'imperial' (mph, mi) - desde GPSWOX
 let USER_TIMEZONE = 'UTC'; // Zona horaria desde GPSWOX (ej: 'America/Bogota', 'Europe/Madrid')
 let USER_HOUR_FORMAT = '24h'; // Formato de hora: '12h' o '24h' desde GPSWOX
@@ -125,14 +129,17 @@ const PAGE_SIZE = 30;
 let driversPage = 1;
 let eventsPage  = 1;
 
+// Umbrales de DISPARO por defecto, en m/s² (deben coincidir con los 'low' del
+// backend config/scoring.json). El backend es la fuente de verdad; esto es el
+// fallback si la API no responde. accel/braking/corner = aceleración/frenada/giro.
 const RECOMMENDED = {
-  auto:        { accel: 0.25, braking: 0.25, corner: 20 },
-  camioneta:   { accel: 0.22, braking: 0.23, corner: 18 },
-  camion:      { accel: 0.15, braking: 0.20, corner: 15 },
-  minibus:     { accel: 0.20, braking: 0.22, corner: 12 },
-  bus:         { accel: 0.18, braking: 0.22, corner: 10 },
-  tractomula:  { accel: 0.10, braking: 0.13, corner:  7 },
-  moto:        { accel: 0.30, braking: 0.35, corner: 25 }
+  auto:        { accel: 3.0, braking: 3.4, corner: 3.6 },
+  camioneta:   { accel: 2.8, braking: 3.2, corner: 3.3 },
+  camion:      { accel: 2.4, braking: 2.7, corner: 2.9 },
+  minibus:     { accel: 2.6, braking: 3.0, corner: 3.2 },
+  bus:         { accel: 2.6, braking: 2.9, corner: 3.1 },
+  tractomula:  { accel: 2.2, braking: 2.4, corner: 2.6 },
+  moto:        { accel: 3.8, braking: 4.3, corner: 4.5 }
 };
 
 const SECTOR_PROFILES = {
@@ -141,11 +148,11 @@ const SECTOR_PROFILES = {
     sublabel: 'Pasajeros menores de edad — máxima exigencia',
     detail:   'Aplicable a cualquier vehículo que transporte estudiantes. Los umbrales son los más estrictos del sistema: cualquier maniobra brusca representa un riesgo directo para los pasajeros. Recomendado también para transporte universitario y de personal.',
     applies:  ['auto', 'camioneta', 'minibus', 'bus'],
-    thresholds: {
-      auto:      { accel: 0.12, braking: 0.14, corner: 10 },
-      camioneta: { accel: 0.12, braking: 0.14, corner: 10 },
-      minibus:   { accel: 0.10, braking: 0.12, corner:  8 },
-      bus:       { accel: 0.10, braking: 0.12, corner:  7 },
+    thresholds: { // m/s² — más estrictos (más sensibles) que el default
+      auto:      { accel: 2.2, braking: 2.4, corner: 2.6 },
+      camioneta: { accel: 2.2, braking: 2.4, corner: 2.6 },
+      minibus:   { accel: 2.0, braking: 2.2, corner: 2.4 },
+      bus:       { accel: 2.0, braking: 2.2, corner: 2.3 },
     }
   },
   carga_peligrosa: {
@@ -153,9 +160,9 @@ const SECTOR_PROFILES = {
     sublabel: 'Materiales peligrosos, líquidos o explosivos',
     detail:   'Para vehículos que transportan sustancias clasificadas como peligrosas: combustibles, químicos, líquidos a presión o materiales explosivos. El riesgo no es solo para el conductor — cualquier maniobra brusca puede desencadenar un derrame, explosión o emergencia química. Los umbrales son los más bajos del sistema.',
     applies:  ['camion', 'tractomula'],
-    thresholds: {
-      camion:     { accel: 0.08, braking: 0.10, corner: 6 },
-      tractomula: { accel: 0.06, braking: 0.08, corner: 5 },
+    thresholds: { // m/s² — los más estrictos del sistema
+      camion:     { accel: 1.8, braking: 2.0, corner: 2.2 },
+      tractomula: { accel: 1.6, braking: 1.8, corner: 2.0 },
     }
   }
 };
@@ -299,8 +306,64 @@ function t(key) {
   return I18N[key] || key;
 }
 
+// Traduce el DOM bajo `root` usando I18N con el TEXTO ESPAÑOL como clave natural.
+// En español es no-op (es.json no tiene claves naturales → el DOM ya está en español).
+// En en/pt, los archivos i18n traen "frase en español": "traducción" y se reemplaza
+// el texto exacto de nodos y de atributos (placeholder/title/aria-label).
+let _translating = false;
+function translateDOM(root) {
+  root = root || document.body;
+  if (!root || USER_LANGUAGE === 'es') return;
+  _translating = true;
+  try {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const nodes = [];
+    let node;
+    while ((node = walker.nextNode())) nodes.push(node);
+    nodes.forEach(n => {
+      const key = n.nodeValue.trim();
+      if (!key) return;
+      const tr = I18N[key];
+      if (tr && tr !== key) n.nodeValue = n.nodeValue.replace(key, tr);
+    });
+    root.querySelectorAll('[placeholder],[title],[aria-label]').forEach(el => {
+      ['placeholder', 'title', 'aria-label'].forEach(a => {
+        const v = el.getAttribute(a);
+        const tr = v && I18N[v.trim()];
+        if (tr && tr !== v.trim()) el.setAttribute(a, tr);
+      });
+    });
+  } catch (e) { console.error('translateDOM:', e); }
+  _translating = false;
+}
+
+// Observa el DOM y traduce el contenido que se renderiza después (modales, detalle
+// de conductor, etc.). Debounced; se ignora mientras translateDOM está corriendo
+// (las traducciones no son claves → no hay bucle). No-op en español.
+let _i18nObserver = null;
+function startI18nObserver() {
+  if (_i18nObserver || USER_LANGUAGE === 'es' || !document.body) return;
+  let pending = false;
+  _i18nObserver = new MutationObserver(() => {
+    if (_translating || pending) return;
+    pending = true;
+    setTimeout(() => { pending = false; translateDOM(document.body); }, 200);
+  });
+  _i18nObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
 // Cargar idioma desde GPSWOX
 async function loadUserLanguage(token) {
+  // Override opcional ?lang=es|en|pt para previsualizar/probar un idioma sin cambiar la cuenta.
+  const urlLang = _URL_LANG;
+  if (urlLang && ['es', 'en', 'pt', 'fr', 'de', 'it'].includes(urlLang)) {
+    USER_LANGUAGE = urlLang;
+    await loadI18n(urlLang);
+    updateBranding(); updateTableHeaders();
+    translateDOM(document.body);
+    startI18nObserver();
+    return true;
+  }
   try {
     const r = await fetch(`${API_BASE}/config/user-language?token=${encodeURIComponent(token)}`);
     if (r.ok) {
@@ -323,6 +386,9 @@ async function loadUserLanguage(token) {
         if (document.getElementById('selectAllDriversLabel')) {
           document.getElementById('selectAllDriversLabel').textContent = t('select_all');
         }
+        // Traducir el shell estático (menú, encabezados, botones, etiquetas).
+        translateDOM(document.body);
+        startI18nObserver();
         return true;
       }
     }
@@ -798,6 +864,9 @@ async function loadEvents(token, from, to) {
         trip_id: e.trip_id || '',
         driver_id: e.driver_id?.toString() || e.vehicle_id?.toString() || '',
         vehicle_id: e.vehicle_id?.toString() || e.driver_id?.toString() || '',
+        vehicle_name: e.vehicle_name || '',
+        driver: e.driver || '',
+        source: e.source || '',
         type: e.type || '',
         severity: e.severity || 'medio',
         ts: e.ts || e.timestamp || new Date().toISOString(),
@@ -910,20 +979,37 @@ async function loadData() {
     // Cargar tipos de vehículos — primero del servidor, luego localStorage como fallback
     let savedTypes = null;
     let savedVehicleTypes = null;
+    let _serverVT = {};
     try {
       const r = await fetch(`${API_BASE}/config/vehicle-types?token=${encodeURIComponent(USER_TOKEN)}`);
       if (r.ok) {
         const d = await r.json();
         if (d.status === 'ok') {
+          _serverVT = d.vehicleTypes || d.types || {};
           if (Object.keys(d.types || {}).length > 0) savedTypes = JSON.stringify(d.types);
           if (Object.keys(d.vehicleTypes || {}).length > 0) savedVehicleTypes = JSON.stringify(d.vehicleTypes);
-          // Sincronizar localStorage con lo del servidor
-          if (savedTypes) localStorage.setItem('driveiq_vehicle_types', savedTypes);
-          if (savedVehicleTypes) localStorage.setItem('driveiq_vehicle_types_vehicles', savedVehicleTypes);
         }
       }
     } catch (_) {}
-    // Fallback a localStorage si el servidor no devolvió datos
+    // COSECHA no destructiva: si este navegador tiene tipos que el servidor aún no tiene
+    // (asignados antes de la migración por-equipo), subirlos UNA vez. El backend solo
+    // acepta equipos de esta flota y solo llena vacíos (no pisa). Así no se pierde nada.
+    try {
+      const _localVT = JSON.parse(localStorage.getItem('driveiq_vehicle_types_vehicles') || localStorage.getItem('driveiq_vehicle_types') || '{}');
+      const _gaps = {};
+      for (const k in _localVT) { if (_localVT[k] && !_serverVT[k]) _gaps[k] = _localVT[k]; }
+      if (Object.keys(_gaps).length) {
+        fetch(`${API_BASE}/config/vehicle-types`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: USER_TOKEN, vehicleTypes: _gaps, types: _gaps, harvest: true }) }).catch(() => {});
+        const _merged = Object.assign({}, _gaps, _serverVT); // servidor manda sobre el gap
+        savedTypes = JSON.stringify(_merged);
+        savedVehicleTypes = JSON.stringify(_merged);
+      }
+    } catch (_) {}
+    // Sincronizar localStorage (caché) con lo efectivo del servidor+cosecha
+    if (savedTypes) localStorage.setItem('driveiq_vehicle_types', savedTypes);
+    if (savedVehicleTypes) localStorage.setItem('driveiq_vehicle_types_vehicles', savedVehicleTypes);
+    // Fallback final: si todo quedó vacío, usar localStorage tal cual (transición)
     if (!savedTypes) savedTypes = localStorage.getItem('driveiq_vehicle_types');
     if (!savedVehicleTypes) savedVehicleTypes = localStorage.getItem('driveiq_vehicle_types_vehicles');
 
@@ -997,10 +1083,9 @@ function calculateScores(drivers, events) {
     // Determinar severidad si no viene en el evento (usando umbrales)
     let finalSeverity = e.severity || 'medio';
     
-    // USAR UMBRALES CONFIGURABLES (WORKING_THRESHOLDS) PARA DETERMINAR SEVERIDAD
-    // Si el evento tiene valores numéricos pero no severidad, calcularla con umbrales
-    // O si la severidad es genérica, refinarla usando umbrales configurables
-    if (!e.severity || e.severity === 'medio' || (thresholds && (thresholds.accel || thresholds.braking || thresholds.corner))) {
+    // La severidad la calcula el BACKEND por tipo de vehículo (m/s², fuente única).
+    // Solo se deriva aquí si por alguna razón el backend no la envió.
+    if (!e.severity) {
       if (e.type === 'acceleration' || e.type === 'hard_acceleration') {
         // Intentar obtener valor de aceleración desde diferentes campos posibles
         const accelValue = e.acceleration || e.accel_value || e.additional?.accel || e.additional?.acceleration || e.value || e.g_force || 0;
@@ -1056,10 +1141,10 @@ function calculateScores(drivers, events) {
     let severityMultiplier = 1.0;
     const severity = (finalSeverity || 'medio').toLowerCase();
     
-    if (severity === 'leve' || severity === 'light' || severity === 'low') {
-      severityMultiplier = 0.5; // Leve = mitad de penalización
-    } else if (severity === 'fuerte' || severity === 'high' || severity === 'severe' || severity === 'hard') {
-      severityMultiplier = 1.5; // Fuerte = 50% más de penalización
+    if (severity === 'leve' || severity === 'light' || severity === 'low' || severity === 'bajo') {
+      severityMultiplier = 0.5; // Bajo/Leve = mitad de penalización
+    } else if (severity === 'fuerte' || severity === 'high' || severity === 'severe' || severity === 'hard' || severity === 'alto') {
+      severityMultiplier = 1.5; // Alto/Fuerte = 50% más de penalización
     } else {
       severityMultiplier = 1.0; // Medio = normal
     }
@@ -1073,7 +1158,7 @@ function calculateScores(drivers, events) {
     
     if (thresholds) {
       // Comparar umbral del vehículo vs umbral estándar (auto)
-      const standardThresholds = RECOMMENDED.auto;
+      const standardThresholds = (WORKING_THRESHOLDS && WORKING_THRESHOLDS.auto) || RECOMMENDED.auto;
       
       if (e.type === 'acceleration' || e.type === 'hard_acceleration') {
         // Si el umbral es más bajo, el vehículo es más sensible → más penalización
@@ -1134,8 +1219,8 @@ function calculateVehicleScore(vehicle, events) {
     // Determinar severidad si no viene (usando umbrales)
     let finalSeverity = e.severity || 'medio';
     
-    // Refinar severidad usando umbrales configurables
-    if (!e.severity || e.severity === 'medio') {
+    // La severidad la calcula el BACKEND por tipo de vehículo (fuente única).
+    if (!e.severity) {
       if (e.type === 'acceleration' || e.type === 'hard_acceleration') {
         const accelValue = e.acceleration || e.accel_value || e.additional?.accel || e.additional?.acceleration || e.value || e.g_force || 0;
         if (accelValue > 0 && thresholds && thresholds.accel) {
@@ -1181,9 +1266,9 @@ function calculateVehicleScore(vehicle, events) {
     // Multiplicador por severidad
     let severityMultiplier = 1.0;
     const severity = (finalSeverity || 'medio').toLowerCase();
-    if (severity === 'leve' || severity === 'light' || severity === 'low') {
+    if (severity === 'leve' || severity === 'light' || severity === 'low' || severity === 'bajo') {
       severityMultiplier = 0.5;
-    } else if (severity === 'fuerte' || severity === 'high' || severity === 'severe' || severity === 'hard') {
+    } else if (severity === 'fuerte' || severity === 'high' || severity === 'severe' || severity === 'hard' || severity === 'alto') {
       severityMultiplier = 1.5;
     }
     
@@ -1191,7 +1276,7 @@ function calculateVehicleScore(vehicle, events) {
     
     // Ajuste por tipo de vehículo usando umbrales
     if (thresholds) {
-      const standardThresholds = RECOMMENDED.auto;
+      const standardThresholds = (WORKING_THRESHOLDS && WORKING_THRESHOLDS.auto) || RECOMMENDED.auto;
       let vehicleMultiplier = 1.0;
       
       if (e.type === 'acceleration' || e.type === 'hard_acceleration') {
@@ -1289,14 +1374,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Siempre se fusiona con RECOMMENDED para incluir tipos nuevos
     WORKING_THRESHOLDS = JSON.parse(JSON.stringify(RECOMMENDED));
     try {
-      const saved = localStorage.getItem('driveiq_thresholds');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Merge: tipos guardados sobreescriben RECOMMENDED, tipos nuevos mantienen default
-        Object.keys(parsed).forEach(k => {
-          if (WORKING_THRESHOLDS[k]) Object.assign(WORKING_THRESHOLDS[k], parsed[k]);
-        });
-      }
+      // Umbrales efectivos del tenant desde el backend (fuente única, m/s²).
+      const rt = await fetch(`${API_BASE}/config/thresholds?token=${encodeURIComponent(USER_TOKEN)}`);
+      if (rt.ok) { const dt = await rt.json(); if (dt.status === 'ok' && dt.thresholds) WORKING_THRESHOLDS = dt.thresholds; }
     } catch(e) { /* usa RECOMMENDED si hay error */ }
 
     await loadData();
@@ -1635,6 +1715,8 @@ function renderInitialState() {
   typesSaved = _typesWereLoaded;
   // Siempre renderizar — si no hay tipos asignados los vehículos aparecen en sección pendientes
   renderAll();
+  // Traducir el contenido recién renderizado (en/pt; no-op en es).
+  translateDOM(document.body);
 }
 
 function populateFilters() {
@@ -2513,6 +2595,24 @@ function renderDriversTable() {
   renderDriversTableContentWithVehicles(itemsToShow);
 }
 
+// ── Tipos de vehículo: taxonomía canónica ÚNICA (igual que el scoring del backend) ──
+const VEHICLE_TYPES_CANON = ['auto', 'camioneta', 'camion', 'minibus', 'bus', 'tractomula', 'moto'];
+// Normaliza valores legados (taxonomía vieja de 4) a la canónica de 7.
+function normVType(t) { return ({ car: 'auto', truck: 'camion', motorcycle: 'moto' })[t] || (t || ''); }
+// Etiqueta del tipo (respeta nombres personalizados de Umbrales; mismo criterio que el modal).
+function vtypeLabel(k) {
+  const L = VEHICLE_CUSTOM_NAMES || {};
+  return ({ auto: L.auto || 'Auto', camioneta: L.camioneta || 'Camioneta', camion: L.camion || 'Camión',
+            minibus: L.minibus || 'Minibús', bus: L.bus || 'Bus', tractomula: L.tractomula || 'Tractomula',
+            moto: L.moto || 'Moto' })[k] || k;
+}
+// HTML de un <select> de tipo con las 7 opciones canónicas; marca el actual (normalizado).
+function vtypeSelectHTML(attrName, attrVal, current, extraAttrs) {
+  const cur = normVType(current);
+  const opts = VEHICLE_TYPES_CANON.map(k => `<option value="${k}"${cur === k ? ' selected' : ''}>${vtypeLabel(k)}</option>`).join('');
+  return `<select class="form-select form-select-sm type-select" ${attrName}="${attrVal}"${extraAttrs || ''}>${opts}</select>`;
+}
+
 function renderDriversTableContent(driversToShow) {
   const tbody = document.querySelector('#driversTable tbody');
   if (!tbody) return;
@@ -2538,8 +2638,7 @@ function renderDriversTableContent(driversToShow) {
   driversSorted.forEach(d => {
     const veh = DATA.vehicles.find(v => v.unit_id === d.unit_id);
     const vehicleName = veh ? formatVehicleName(veh) : (d.unit_id ? `Vehículo ${d.unit_id}` : '-');
-    const selectedType = d.type || '';
-    const typeSelect = `<select class="form-select form-select-sm type-select" data-driver="${d.driver_id}"><option value="car"${selectedType === 'car' ? ' selected' : ''}>${t('car')}</option><option value="truck"${selectedType === 'truck' ? ' selected' : ''}>${t('truck')}</option><option value="bus"${selectedType === 'bus' ? ' selected' : ''}>${t('bus')}</option><option value="moto"${selectedType === 'moto' ? ' selected' : ''}>${t('moto')}</option></select>`;
+    const typeSelect = vtypeSelectHTML('data-driver', d.driver_id, d.type);
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><a href="#" class="driver-link" data-id="${d.driver_id}">${d.name}</a></td><td>${vehicleName} <span class="vehicle-source" title="source"></span></td><td>${typeSelect}</td><td>${d.events_count || 0}</td><td>${renderScore(d.score)}</td>`;
 tbody.appendChild(tr);
@@ -2601,14 +2700,12 @@ function renderDriversTableContentWithVehicles(itemsToShow) {
       driverLink = hasRealDriver
         ? `<a href="#" class="driver-link" data-id="${d.driver_id}">${d.name}</a><div class="drv-no-driver" style="opacity:.55;font-size:.72rem">${d.vehicle_name || vehicleName}</div>`
         : `<span class="drv-vehicle-name">${vehicleName}</span>`;
-      const sel = d.type || '';
-      typeSelect = `<select class="form-select form-select-sm type-select" data-driver="${d.driver_id}"><option value="car"${sel==='car'?' selected':''}>${t('car')}</option><option value="truck"${sel==='truck'?' selected':''}>${t('truck')}</option><option value="bus"${sel==='bus'?' selected':''}>${t('bus')}</option><option value="moto"${sel==='moto'?' selected':''}>${t('moto')}</option></select>`;
+      typeSelect = vtypeSelectHTML('data-driver', d.driver_id, d.type);
       eventsCount = d.events_count || 0;
       score = renderScore(d.score);
     } else {
       driverLink = `<span class="drv-vehicle-name">${vehicleName}</span>`;
-      const vt = (veh.type === 'camion' ? 'truck' : veh.type === 'auto' ? 'car' : veh.type) || '';
-      typeSelect = `<select class="form-select form-select-sm type-select" data-vehicle="${veh.unit_id}" data-has-driver="false"><option value="car"${vt==='car'?' selected':''}>${t('car')}</option><option value="truck"${vt==='truck'?' selected':''}>${t('truck')}</option><option value="bus"${vt==='bus'?' selected':''}>${t('bus')}</option><option value="moto"${vt==='moto'?' selected':''}>${t('moto')}</option></select>`;
+      typeSelect = vtypeSelectHTML('data-vehicle', veh.unit_id, veh.type, ' data-has-driver="false"');
       const vEvents = DATA.events.filter(e => e.vehicle_id === veh.unit_id);
       eventsCount = vEvents.length;
       score = renderScore(calculateVehicleScore(veh, vEvents));
@@ -2727,7 +2824,11 @@ function updateVehicleSourceIcons() {
     const name = linkEl.textContent;
     const drv = DATA.drivers.find(d => d.name === name);
     const veh = DATA.vehicles.find(v => v.unit_id === (drv && drv.unit_id));
-    if (veh && veh.sensors && veh.sensors.length > 0) {
+    // Fuente real según los eventos del vehículo (no por tener cualquier sensor:
+    // el odómetro NO es acelerómetro). ⚙️ si reporta por acelerómetro; si no, 🛰 GPS.
+    const vid = (veh && veh.unit_id) || (drv && drv.unit_id);
+    const evs = vid ? DATA.events.filter(e => e.vehicle_id === vid || e.driver_id === vid) : [];
+    if (evs.some(e => e.source === 'accelerometer')) {
       span.textContent = '⚙️';
       span.title = 'Fuente: Sensor (acelerómetro)';
     } else {
@@ -2762,6 +2863,18 @@ function goPage(key, page) {
   if (key === 'events')  { eventsPage  = page; renderEventsTable(DATA.events); }
 }
 
+// Etiqueta traducida del tipo de evento (un solo lugar para TODA la app).
+// Evita mostrar códigos técnicos en inglés (overspeed/custom/hard_turn).
+function eventTypeLabel(type) {
+  switch (type) {
+    case 'overspeed': return t('overspeed');
+    case 'acceleration': case 'hard_acceleration': return t('accelerations');
+    case 'braking': case 'hard_brake': case 'hard_braking': return t('braking');
+    case 'hard_turn': case 'corner': case 'hard_cornering': return t('hard_turns');
+    default: return type || '';
+  }
+}
+
 function renderEventsTable(events) {
   const tbody = document.querySelector('#eventsTable tbody');
   tbody.innerHTML = '';
@@ -2773,18 +2886,22 @@ function renderEventsTable(events) {
   pageEvents.forEach(e => {
     const d = DATA.drivers.find(x => x.driver_id === e.driver_id);
     const map = `https://www.google.com/maps?q=${e.lat},${e.lon}`;
-    // Traducir nombres de eventos usando i18n (no mostrar códigos técnicos)
-    let eventType = e.type;
-    if (e.type === 'overspeed') eventType = t('overspeed');
-    else if (e.type === 'acceleration' || e.type === 'hard_acceleration') eventType = t('accelerations');
-    else if (e.type === 'braking' || e.type === 'hard_brake' || e.type === 'hard_braking') eventType = t('braking');
-    else if (e.type === 'hard_turn' || e.type === 'corner' || e.type === 'hard_cornering') eventType = t('hard_turns');
-    // Badge de fuente: 🛰 para eventos calculados por GPS satelital
-    const srcBadge = e.source === 'gps'
-      ? `<span class="gps-source-badge" title="Calculado por GPS satelital">🛰</span>`
+    // Etiqueta traducida (nunca el código técnico en inglés)
+    const eventType = eventTypeLabel(e.type);
+    // Icono de fuente de medición, junto al nombre del carro:
+    //   ⚙️ acelerómetro (aceleración/frenada/giro)  ·  🛰 GPS/distancia (exceso de velocidad)
+    const srcBadge = e.source === 'accelerometer'
+      ? `<span class="ev-source-badge" title="Medido por acelerómetro">⚙️</span>`
+      : e.source === 'gps'
+      ? `<span class="ev-source-badge" title="Medido por GPS (distancia)">🛰</span>`
       : '';
+    // Vehículo: nombre real del evento (device_name) con fallback al catálogo.
+    const veh = DATA.vehicles && DATA.vehicles.find(v => v.vehicle_id === e.vehicle_id);
+    const vehName = e.vehicle_name || (veh ? veh.name : '') || '';
+    // Conductor: el asignado en PilotOS (viene en el evento); fallback al lookup.
+    const drvName = e.driver || (d ? d.name : '') || '';
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${e.trip_id || ''}</td><td>${d ? d.name : ''}</td><td>${eventType}${srcBadge}</td><td>${e.severity}</td><td>${formatDateTime(e.ts)}</td><td>${safeFormatSpeed(e.speed)}</td><td><a class="map-link" target="_blank" href="${map}">${t('view_on_map')}</a></td>`;
+    tr.innerHTML = `<td>${e.trip_id || ''}</td><td>${vehName}${srcBadge ? ' ' + srcBadge : ''}</td><td>${drvName}</td><td>${eventType}</td><td>${e.severity}</td><td>${formatDateTime(e.ts)}</td><td>${safeFormatSpeed(e.speed)}</td><td><a class="map-link" target="_blank" href="${map}">${t('view_on_map')}</a></td>`;
     tbody.appendChild(tr);
   });
   document.getElementById('numEvents').textContent = totalEv;
@@ -2819,7 +2936,7 @@ function renderSummary() {
   }
   const ksbEl = document.getElementById('kpiScoreBadge');
   if (ksbEl && dCount > 0) {
-    ksbEl.textContent = scoreLabel;
+    ksbEl.textContent = t(scoreLabel);
     ksbEl.style.background = scoreColor + '22';
     ksbEl.style.color = scoreColor;
   }
@@ -2844,7 +2961,7 @@ function renderSummary() {
   if (kevEl) kevEl.textContent = eCount || '—';
   const kebEl = document.getElementById('kpiEventsBadge');
   if (kebEl && high > 0) {
-    kebEl.textContent = `${high} alto${high > 1 ? 's' : ''}`;
+    kebEl.textContent = t(high > 1 ? '{n} altos' : '{n} alto').replace('{n}', high);
     kebEl.style.background = 'rgba(248,81,73,0.15)';
     kebEl.style.color = '#F85149';
   }
@@ -2858,22 +2975,22 @@ function renderSummary() {
   const vehicleIdsWithEvents = new Set(DATA.events.map(e => e.vehicle_id));
   const activeVehicles = DATA.vehicles.filter(v => vehicleIdsWithEvents.has(v.unit_id)).length;
   const vActivePct = vCount > 0 ? Math.round((activeVehicles / vCount) * 100) : 0;
-  if (kvbEl) { kvbEl.textContent = vCount > 0 ? 'Activos' : ''; kvbEl.style.background = 'rgba(63,185,80,0.15)'; kvbEl.style.color = '#3FB950'; }
+  if (kvbEl) { kvbEl.textContent = vCount > 0 ? t('Activos') : ''; kvbEl.style.background = 'rgba(63,185,80,0.15)'; kvbEl.style.color = '#3FB950'; }
   const kvbBarEl = document.getElementById('kpiVehiclesBar');
   if (kvbBarEl) kvbBarEl.style.width = vActivePct + '%';
 
   // Tooltip en cada tarjeta para explicar la barra
   const scoreBarTrack = document.querySelector('#kpiScoreBar')?.closest('.kpi-bar-track');
-  if (scoreBarTrack) scoreBarTrack.title = `Puntaje promedio: ${avg}/100`;
+  if (scoreBarTrack) scoreBarTrack.title = t('Puntaje promedio: {n}/100').replace('{n}', avg);
   const driversBarTrack = document.querySelector('#kpiDriversBar')?.closest('.kpi-bar-track');
-  if (driversBarTrack) driversBarTrack.title = `${dCount} conductores de ${vCount} vehículos (${vCount > 0 ? Math.round((dCount/vCount)*100) : 0}%)`;
+  if (driversBarTrack) driversBarTrack.title = t('{d} conductores de {v} vehículos ({p}%)').replace('{d}', dCount).replace('{v}', vCount).replace('{p}', vCount > 0 ? Math.round((dCount/vCount)*100) : 0);
   const eventsBarTrack = document.querySelector('#kpiEventsBar')?.closest('.kpi-bar-track');
   if (eventsBarTrack) {
     const evPct = dCount > 0 ? Math.min(Math.round((eCount / Math.max(dCount * 8, 1)) * 100), 100) : 0;
-    eventsBarTrack.title = `${eCount} eventos — ${evPct}% del umbral de alerta`;
+    eventsBarTrack.title = t('{n} eventos — {p}% del umbral de alerta').replace('{n}', eCount).replace('{p}', evPct);
   }
   const vehiclesBarTrack = document.querySelector('#kpiVehiclesBar')?.closest('.kpi-bar-track');
-  if (vehiclesBarTrack) vehiclesBarTrack.title = `${activeVehicles} de ${vCount} vehículos con actividad en el período (${vActivePct}%)`;
+  if (vehiclesBarTrack) vehiclesBarTrack.title = t('{a} de {v} vehículos con actividad en el período ({p}%)').replace('{a}', activeVehicles).replace('{v}', vCount).replace('{p}', vActivePct);
 }
 
 const EV_DISPLAY = {
@@ -2912,7 +3029,7 @@ function renderChart(events) {
   const consolidated = {};
   Object.entries(grouped).forEach(([type, count]) => {
     const def = EV_DISPLAY[type];
-    const label = def ? def.label : type;
+    const label = def ? def.label : eventTypeLabel(type);
     consolidated[label] = (consolidated[label] || { count: 0, def: def || { grad: 'linear-gradient(90deg,#64748B,#94A3B8)', dot: '#64748B' } });
     consolidated[label].count += count;
   });
@@ -2953,22 +3070,23 @@ async function openDriverDetailById(id) {
   const veh = DATA.vehicles.find(v => v.unit_id === d.unit_id);
   document.getElementById('detailDriverName').textContent = d.name;
   document.getElementById('detailVehicleName').textContent = formatVehicleName(veh);
+  const tbody = document.querySelector('#detailEventsTable tbody');
+  tbody.innerHTML = '';
+  const events = DATA.events.filter(e => e.driver_id === id);
+  // Icono de fuente real del vehículo según sus eventos (no por tener odómetro).
   const icon = document.getElementById('vehicleSourceIcon');
   icon.innerHTML = '';
-  if (veh && veh.sensors && veh.sensors.length > 0) {
+  if (events.some(e => e.source === 'accelerometer')) {
     icon.textContent = '⚙️';
     icon.title = 'Fuente: Sensor (acelerómetro)';
   } else {
     icon.textContent = '🛰️';
     icon.title = 'Fuente: GPS';
   }
-  const tbody = document.querySelector('#detailEventsTable tbody');
-  tbody.innerHTML = '';
-  const events = DATA.events.filter(e => e.driver_id === id);
   events.forEach(e => {
     const tr = document.createElement('tr');
     const map = `https://www.google.com/maps?q=${e.lat},${e.lon}`;
-    tr.innerHTML = `<td>${e.trip_id || ''}</td><td>${e.type}</td><td>${e.severity}</td><td>${new Date(e.ts).toLocaleString()}</td><td><a class="map-link" target="_blank" href="${map}">Ver en mapa</a></td>`;
+    tr.innerHTML = `<td>${e.trip_id || ''}</td><td>${eventTypeLabel(e.type)}</td><td>${e.severity}</td><td>${new Date(e.ts).toLocaleString()}</td><td><a class="map-link" target="_blank" href="${map}">Ver en mapa</a></td>`;
     tbody.appendChild(tr);
   });
   if (veh && veh.unit_id && USER_TOKEN) {
@@ -3050,13 +3168,8 @@ function downloadDriverHtml(id) {
   let html = `<!DOCTYPE html><html lang="${USER_LANGUAGE}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${d.name} - DriveIQ</title><style>body{font-family:Arial,sans-serif;margin:20px;background:#0B1220;color:#E6EDF3}h1{color:#E6EDF3}table{border-collapse:collapse;width:100%;background:#0F1A2E;margin:20px 0;border:1px solid #1C2A44}th,td{border:1px solid #1C2A44;padding:12px;text-align:left;color:#E6EDF3}th{background:#121F36;color:#E6EDF3;font-weight:600}tr:nth-child(even){background:#121F36}a{color:#2F81F7;text-decoration:none}a:hover{text-decoration:underline}.score{font-weight:700;padding:6px 10px;border-radius:6px;display:inline-block}.score-good{background:#3FB950;color:#fff}.score-mid{background:#D29922;color:#fff}.score-bad{background:#F85149;color:#fff}small{color:#8B949E}</style></head><body><h1>${d.name}</h1><p><strong>${USER_LANGUAGE === 'en' ? 'Vehicle' : 'Vehículo'}:</strong> ${formatVehicleName(veh) || 'N/A'}</p><p><strong>${USER_LANGUAGE === 'en' ? 'Score' : 'Puntuación'}:</strong> <span class="score ${d.score >= 80 ? 'score-good' : d.score >= 60 ? 'score-mid' : 'score-bad'}">${d.score || 0}</span></p><h2>${USER_LANGUAGE === 'en' ? 'Events' : 'Eventos'}</h2><table><thead><tr><th>${USER_LANGUAGE === 'en' ? 'Trip ID' : 'ID Viaje'}</th><th>${USER_LANGUAGE === 'en' ? 'Type' : 'Tipo'}</th><th>${USER_LANGUAGE === 'en' ? 'Severity' : 'Severidad'}</th><th>${USER_LANGUAGE === 'en' ? 'Date' : 'Fecha'}</th><th>${USER_LANGUAGE === 'en' ? 'Speed' : 'Velocidad'}</th><th>${USER_LANGUAGE === 'en' ? 'Location' : 'Ubicación'}</th></tr></thead><tbody>`;
   ev.forEach(e => {
     const map = `https://www.google.com/maps?q=${e.lat},${e.lon}`;
-    // Traducir tipo de evento en reporte HTML
-    let eventTypeReport = e.type;
-    if (e.type === 'overspeed') eventTypeReport = t('overspeed');
-    else if (e.type === 'acceleration' || e.type === 'hard_acceleration') eventTypeReport = t('accelerations');
-    else if (e.type === 'braking' || e.type === 'hard_brake' || e.type === 'hard_braking') eventTypeReport = t('braking');
-    else if (e.type === 'hard_turn' || e.type === 'corner' || e.type === 'hard_cornering') eventTypeReport = t('hard_turns');
-    
+    const eventTypeReport = eventTypeLabel(e.type);
+
     html += `<tr><td>${e.trip_id || ''}</td><td>${eventTypeReport}</td><td>${e.severity}</td><td>${formatDateTime(e.ts)}</td><td>${safeFormatSpeed(e.speed)}</td><td><a href="${map}" target="_blank">${t('view_on_map')}</a></td></tr>`;
   });
   html += `</tbody></table><p><small>${t('report.generated_by')} DriveIQ - ${formatDateTime(new Date().toISOString())}</small></p></body></html>`;
@@ -3311,7 +3424,12 @@ function applySelectedCalibration() {
   }, 350);
 }
 
-function openThresholds() {
+async function openThresholds() {
+  // Cargar los umbrales efectivos del tenant desde el backend (m/s², fuente única).
+  try {
+    const r = await fetch(`${API_BASE}/config/thresholds?token=${encodeURIComponent(USER_TOKEN)}`);
+    if (r.ok) { const d = await r.json(); if (d.status === 'ok' && d.thresholds) WORKING_THRESHOLDS = d.thresholds; }
+  } catch (e) { /* si falla, se usa lo cargado en memoria */ }
   if (!WORKING_THRESHOLDS) WORKING_THRESHOLDS = JSON.parse(JSON.stringify(RECOMMENDED));
   const container = document.getElementById('thresholdsEditor');
   if (!container) return;
@@ -3366,18 +3484,18 @@ function openThresholds() {
       <div class="vtype-thresholds">
         <div class="vtype-th-field">
           <span class="vtype-th-label">Aceleración</span>
-          <span class="vtype-th-unit">g</span>
-          <input data-key="${k}" data-field="accel" type="number" step="0.01" class="vtype-th-input" value="${threshold.accel || ''}">
+          <span class="vtype-th-unit">m/s²</span>
+          <input data-key="${k}" data-field="accel" type="number" step="0.1" class="vtype-th-input" value="${threshold.accel || ''}">
         </div>
         <div class="vtype-th-field">
           <span class="vtype-th-label">Frenada</span>
-          <span class="vtype-th-unit">g</span>
-          <input data-key="${k}" data-field="braking" type="number" step="0.01" class="vtype-th-input" value="${threshold.braking || ''}">
+          <span class="vtype-th-unit">m/s²</span>
+          <input data-key="${k}" data-field="braking" type="number" step="0.1" class="vtype-th-input" value="${threshold.braking || ''}">
         </div>
         <div class="vtype-th-field">
           <span class="vtype-th-label">Giro</span>
-          <span class="vtype-th-unit">°</span>
-          <input data-key="${k}" data-field="corner" type="number" class="vtype-th-input" value="${threshold.corner || ''}">
+          <span class="vtype-th-unit">m/s²</span>
+          <input data-key="${k}" data-field="corner" type="number" step="0.1" class="vtype-th-input" value="${threshold.corner || ''}">
         </div>
       </div>
     </div>`;
@@ -3413,6 +3531,13 @@ async function saveThresholds() {
     localStorage.setItem('driveiq_thresholds', JSON.stringify(WORKING_THRESHOLDS));
   }
   bootstrap.Modal.getInstance(document.getElementById('modalThresholds')).hide();
+  // Recargar datos para que la severidad de los eventos refleje los nuevos umbrales.
+  try {
+    if (typeof loadData === 'function') {
+      await loadData();
+      if (typeof renderInitialState === 'function') renderInitialState();
+    }
+  } catch (e) { console.error('Recarga tras guardar umbrales:', e); }
   alert(t('save.success'));
 }
 
@@ -4675,21 +4800,21 @@ function renderIndicadoresSection() {
     const fmt = d => { const [y,m,day] = d.split('-'); return `${day}/${m}/${y.slice(2)}`; };
     periodLabel = `${fmt(startEl.value)} – ${fmt(endEl.value)}`;
   }
-  setTxt('impPeriodBadge', periodLabel);
-  setTxt('impDaysSub', 'Período de ' + days + ' días');
+  setTxt('impPeriodBadge', t(periodLabel));
+  setTxt('impDaysSub', t('Período de {n} días').replace('{n}', days));
 
   // — Nocturno —
   const nightEvs = events.filter(e => { const h = new Date(e.ts).getHours(); return h >= 20 || h < 6; });
   const nightPct = Math.round((nightEvs.length / total) * 100);
   setTxt('impNightPct',   nightPct + '%');
-  setTxt('impNightCount', nightEvs.length + ' de ' + total + ' total');
+  setTxt('impNightCount', t('{n} de {t} total').replace('{n}', nightEvs.length).replace('{t}', total));
   const nightBar = $('impNightBar');
   if (nightBar) nightBar.style.width = Math.min(100, nightPct) + '%';
 
   // riesgo nocturno — card dinámica
   const riskCard = $('impNightRiskCard');
   const riskLabel = nightPct >= 30 ? 'Alto' : nightPct >= 15 ? 'Moderado' : 'Bajo';
-  setTxt('impNightRisk', riskLabel);
+  setTxt('impNightRisk', t(riskLabel));
   if (riskCard) {
     riskCard.classList.remove('risk-yellow','risk-red');
     if (nightPct >= 30)       riskCard.classList.add('risk-red');
@@ -4702,7 +4827,7 @@ function renderIndicadoresSection() {
   // — Eventos críticos —
   const highRiskEvs = events.filter(e => (e.severity||'').toLowerCase() === 'alto').length;
   setTxt('impHighRisk',    highRiskEvs);
-  setTxt('impHighRiskPct', Math.round(highRiskEvs / total * 100) + '% del total');
+  setTxt('impHighRiskPct', t('{n}% del total').replace('{n}', Math.round(highRiskEvs / total * 100)));
 
   // — Combustible / CO₂ —
   const hardAccel   = events.filter(e => e.type === 'hard_acceleration').length;
@@ -4718,7 +4843,7 @@ function renderIndicadoresSection() {
   const lowRiskCount = totalDrivers - driversHighRisk.size;
   const lowRiskPct   = totalDrivers > 0 ? Math.round(lowRiskCount / totalDrivers * 100) : 0;
   setTxt('impLowRisk',      lowRiskPct + '%');
-  setTxt('impLowRiskCount', lowRiskCount + ' sin eventos críticos');
+  setTxt('impLowRiskCount', t('{n} sin eventos críticos').replace('{n}', lowRiskCount));
 
   // — Score promedio —
   const avgScore = DATA.drivers && DATA.drivers.length > 0
@@ -4994,8 +5119,8 @@ const _NIGHT_TIP = {
 
 const _PEAK_HOURS_TIP = (hour) => ({
   ico: '⏰', ico_bg: 'rgba(245,158,11,.15)', ico_color: '#f59e0b',
-  title: `Hora pico de riesgo: ${hour}:00–${hour+1}:00`,
-  text: `La mayoría de sus eventos se concentran alrededor de las ${hour}:00 h. Si corresponde a hora pico de tráfico, planificar rutas alternativas o salir 15 min antes puede reducir eventos a la mitad.`
+  title: t('Hora pico de riesgo: {h}:00–{h2}:00').replace('{h}', hour).replace('{h2}', hour+1),
+  text: t('La mayoría de sus eventos se concentran alrededor de las {h}:00 h. Si corresponde a hora pico de tráfico, planificar rutas alternativas o salir 15 min antes puede reducir eventos a la mitad.').replace('{h}', hour)
 });
 
 const _DAY_TIPS = {
@@ -5040,7 +5165,7 @@ function _buildCoachingPlan(driverId) {
   if (score < 60 || altoCount >= 5) priority = 'urgent';
   else if (score < 80 || altoCount >= 2) priority = 'moderate';
 
-  const priorityLabel = { urgent: 'Urgente', moderate: 'Moderado', good: 'Buen nivel' };
+  const priorityLabel = { urgent: t('Urgente'), moderate: t('Moderado'), good: t('Buen nivel') };
 
   // Construir tips (máx 3)
   const tips = [];
@@ -5056,9 +5181,9 @@ function _buildCoachingPlan(driverId) {
 
   // Patrón resumen
   const patternParts = [];
-  if (topType) patternParts.push(`Evento más frecuente: <strong>${_evLabel(topType)}</strong> (${typeCounts[topType]})`);
-  if (dayCounts[topDay] > 0) patternParts.push(`Día con más eventos: <strong>${_DAY_TIPS[topDay]}</strong>`);
-  if (nightPct > 0) patternParts.push(`Nocturno: <strong>${nightPct}%</strong>`);
+  if (topType) patternParts.push(t('Evento más frecuente: {ev} ({n})').replace('{ev}', '<strong>' + t(_evLabel(topType)) + '</strong>').replace('{n}', typeCounts[topType]));
+  if (dayCounts[topDay] > 0) patternParts.push(t('Día con más eventos: {d}').replace('{d}', '<strong>' + t(_DAY_TIPS[topDay]) + '</strong>'));
+  if (nightPct > 0) patternParts.push(t('Nocturno: {n}').replace('{n}', '<strong>' + nightPct + '%</strong>'));
 
   return { driver, score, priority, priorityLabel: priorityLabel[priority], tips: tips.slice(0,3), pattern: patternParts.join(' · '), total, altoCount };
 }
@@ -5075,10 +5200,10 @@ function _evLabel(type) {
 function _coachCardHTML(plan) {
   if (!plan) return '';
   const sc = plan.score >= 80 ? '#22c55e' : plan.score >= 60 ? '#f59e0b' : '#ef4444';
-  const tipsHTML = plan.tips.map(t => `
+  const tipsHTML = plan.tips.map(tip => `
     <div class="diq-coach-tip">
-      <div class="diq-coach-tip-ico" style="background:${t.ico_bg};color:${t.ico_color}">${t.ico}</div>
-      <div><strong>${t.title}:</strong> ${t.text}</div>
+      <div class="diq-coach-tip-ico" style="background:${tip.ico_bg};color:${tip.ico_color}">${tip.ico}</div>
+      <div><strong>${t(tip.title)}:</strong> ${t(tip.text)}</div>
     </div>`).join('');
 
   return `
@@ -5090,7 +5215,7 @@ function _coachCardHTML(plan) {
       <span class="diq-coach-priority-pill pill-${plan.priority}">${plan.priorityLabel}</span>
     </div>
     <div class="diq-coach-tips">${tipsHTML}</div>
-    ${plan.pattern ? `<div class="diq-coach-pattern">${plan.pattern} · ${plan.total} eventos (${plan.altoCount} críticos)</div>` : ''}
+    ${plan.pattern ? `<div class="diq-coach-pattern">${plan.pattern} · ${t('{n} eventos ({c} críticos)').replace('{n}', plan.total).replace('{c}', plan.altoCount)}</div>` : ''}
   </div>`;
 }
 
@@ -5123,17 +5248,17 @@ function renderDriverCoaching(driverId) {
   const plan = _buildCoachingPlan(driverId);
   if (!plan || !plan.tips.length) { block.innerHTML = ''; return; }
 
-  const tipsHTML = plan.tips.map(t => `
+  const tipsHTML = plan.tips.map(tip => `
     <div class="diq-oc-tip">
-      <span style="font-size:.9rem">${t.ico}</span>
-      <div><strong style="color:var(--text-primary)">${t.title}:</strong> ${t.text}</div>
+      <span style="font-size:.9rem">${tip.ico}</span>
+      <div><strong style="color:var(--text-primary)">${t(tip.title)}:</strong> ${t(tip.text)}</div>
     </div>`).join('');
 
   block.innerHTML = `
     <div class="diq-offcanvas-coaching">
       <div class="diq-offcanvas-coaching-title">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-        Plan de coaching personalizado
+        ${t('Plan de coaching personalizado')}
         <span class="diq-coach-priority-pill pill-${plan.priority}" style="margin-left:auto">${plan.priorityLabel}</span>
       </div>
       ${tipsHTML}
@@ -5215,25 +5340,25 @@ function renderDriverComparativa(driverId) {
     <div class="diq-comp-row">
       <div class="diq-comp-score-main">
         <div class="diq-comp-score-num" style="color:${scoreColor}">${driver.score}</div>
-        <div class="diq-comp-score-label">Puntuación</div>
+        <div class="diq-comp-score-label">${t('Puntuación')}</div>
       </div>
       <div class="diq-comp-stats">
         ${avgFlota != null ? `
         <div class="diq-comp-stat">
-          <div class="diq-comp-stat-val" style="color:${diffColor}">${diffSign}${diffVal} vs flota</div>
-          <div class="diq-comp-stat-sub">Promedio flota: ${avgFlota}</div>
+          <div class="diq-comp-stat-val" style="color:${diffColor}">${t('{n} vs flota').replace('{n}', diffSign + diffVal)}</div>
+          <div class="diq-comp-stat-sub">${t('Promedio flota: {n}').replace('{n}', avgFlota)}</div>
         </div>` : ''}
         <div class="diq-comp-stat">
-          <div class="diq-comp-stat-val" style="color:${pctColor}">Top ${100 - percentil}%</div>
-          <div class="diq-comp-stat-sub">Percentil ${percentil} · Puesto ${rank + 1} de ${total}</div>
+          <div class="diq-comp-stat-val" style="color:${pctColor}">${t('Top {n}%').replace('{n}', 100 - percentil)}</div>
+          <div class="diq-comp-stat-sub">${t('Percentil {p} · Puesto {r} de {t}').replace('{p}', percentil).replace('{r}', rank + 1).replace('{t}', total)}</div>
         </div>
         <div class="diq-comp-stat">
-          <div class="diq-comp-stat-val" style="color:${trendColor}">${trendIco} ${trendTxt}</div>
-          <div class="diq-comp-stat-sub">Últimas 2 semanas</div>
+          <div class="diq-comp-stat-val" style="color:${trendColor}">${trendIco} ${t(trendTxt)}</div>
+          <div class="diq-comp-stat-sub">${t('Últimas 2 semanas')}</div>
         </div>
         <div class="diq-comp-stat">
           <div class="diq-comp-stat-val">${renderEventsPerKmBadge(driverId)}</div>
-          <div class="diq-comp-stat-sub">Densidad de eventos</div>
+          <div class="diq-comp-stat-sub">${t('Densidad de eventos')}</div>
         </div>
       </div>
     </div>`;
@@ -5262,7 +5387,7 @@ function renderBenchmarking() {
   if (!grid) return;
   const sector = document.getElementById('benchSectorSelect')?.value || 'logistica';
   const ref    = BENCH_REFERENCE[sector];
-  if (!ref || !DATA.drivers.length) { grid.innerHTML = '<p class="text-muted small">Sin datos suficientes.</p>'; return; }
+  if (!ref || !DATA.drivers.length) { grid.innerHTML = '<p class="text-muted small">' + t('Sin datos suficientes.') + '</p>'; return; }
 
   const scores       = DATA.drivers.map(d => d.score).filter(s => typeof s === 'number');
   const myAvgScore   = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;
@@ -5283,23 +5408,23 @@ function renderBenchmarking() {
     const color  = better ? '#3fb950' : Math.abs(diff) < refVal*0.1 ? '#f97316' : '#f85149';
     const icon   = better ? '✅' : '⚠️';
     const pct    = refVal > 0 ? Math.round(Math.abs(diff)/refVal*100) : 0;
-    const txt    = diff === 0 ? 'igual al sector'
+    const txt    = diff === 0 ? t('igual al sector')
       : better
-        ? `${pct}% mejor que el sector`
-        : `${pct}% por encima del sector`;
+        ? t('{n}% mejor que el sector').replace('{n}', pct)
+        : t('{n}% por encima del sector').replace('{n}', pct);
     const barMyW  = Math.min(100, Math.round((myVal  / (Math.max(myVal, refVal)*1.3||1))*100));
     const barRefW = Math.min(100, Math.round((refVal / (Math.max(myVal, refVal)*1.3||1))*100));
     return `
       <div class="bench-card">
-        <div class="bench-card-title">${label}</div>
+        <div class="bench-card-title">${t(label)}</div>
         <div class="bench-bars">
           <div class="bench-bar-row">
-            <span class="bench-bar-label">Tu flota</span>
+            <span class="bench-bar-label">${t('Tu flota')}</span>
             <div class="bench-bar-track"><div class="bench-bar-fill" style="width:${barMyW}%;background:${color}"></div></div>
             <span class="bench-bar-val" style="color:${color}">${myVal}</span>
           </div>
           <div class="bench-bar-row">
-            <span class="bench-bar-label">Sector</span>
+            <span class="bench-bar-label">${t('Sector')}</span>
             <div class="bench-bar-track"><div class="bench-bar-fill" style="width:${barRefW}%;background:var(--border-soft)"></div></div>
             <span class="bench-bar-val">${refVal}</span>
           </div>
@@ -5316,7 +5441,7 @@ function renderBenchmarking() {
       ${metricCard('Aceleraciones bruscas', myAcels, ref.aceleraciones)}
       ${metricCard('Excesos de velocidad', myVel, ref.velocidad)}
     </div>
-    <p class="bench-note">* Valores de referencia basados en flotas del sector <strong>${ref.label}</strong>. Los datos de tu flota son calculados sobre el período cargado.</p>`;
+    <p class="bench-note">${t('* Valores de referencia basados en flotas del sector {sector}. Los datos de tu flota son calculados sobre el período cargado.').replace('{sector}', '<strong>' + t(ref.label) + '</strong>')}</p>`;
 }
 
 // Inicializar benchmarking cuando haya datos

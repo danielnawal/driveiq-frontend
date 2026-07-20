@@ -38,6 +38,8 @@
   });
   /* Captura ?token= de la URL (viene de POST /auth de GPSwox) — limpia la URL de inmediato */
   var p = new URLSearchParams(window.location.search);
+  /* Captura ?lang= ANTES de limpiar la URL (override de idioma para previsualizar) */
+  window.__DIQ_LANG = p.get('lang');
   var tk = p.get('token');
   if (tk) {
     try {
@@ -247,7 +249,7 @@
         <div id="eventChart" class="ev-chart-body"></div>
       </div>
 
-      <div class="card mb-3" id="eventsSection"><div class="card-body"><h6>Tabla de eventos</h6><div class="table-responsive"><table class="table table-sm" id="eventsTable"><thead class="table-light"><tr><th id="thTrip">Viaje</th><th>Conductor</th><th>Tipo</th><th>Severidad</th><th>Fecha</th><th>Velocidad</th><th>Ubicación</th></tr></thead><tbody></tbody></table></div></div><div id="eventsPaginator"></div></div>
+      <div class="card mb-3" id="eventsSection"><div class="card-body"><h6>Tabla de eventos</h6><div class="table-responsive"><table class="table table-sm" id="eventsTable"><thead class="table-light"><tr><th id="thTrip">Viaje</th><th>Vehículo</th><th>Conductor</th><th>Tipo</th><th>Severidad</th><th>Fecha</th><th>Velocidad</th><th>Ubicación</th></tr></thead><tbody></tbody></table></div></div><div id="eventsPaginator"></div></div>
 
       <!-- ══════════════════════════════════════════════════════════════
            SECCIÓN COACHING
